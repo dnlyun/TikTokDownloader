@@ -20,14 +20,20 @@ tasks: dict[str, str] = {}
 
 connections: dict[str, WebSocket] = {}
 
-_counter = 0
+COUNTER_FILE = Path("counter.txt")
 _counter_lock = Lock()
 
+def _load_counter() -> int:
+    try:
+        return int(COUNTER_FILE.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return 0
+
 def _next_number() -> int:
-    global _counter
     with _counter_lock:
-        _counter += 1
-        return _counter
+        n = _load_counter() + 1
+        COUNTER_FILE.write_text(str(n))
+        return n
 
 class DownloadRequest(BaseModel):
     url: str
