@@ -19,7 +19,7 @@ h1 {
     text-align: center;
     font-size: 1.6rem;
     margin-bottom: 24px;
-    color: #fff
+    color: #fff;
 }
 
 .drop-zone {
@@ -133,10 +133,12 @@ h1 {
     transition: width 0.3s ease;
     width: 0%;
 }
+
 .task-message {
     font-size: 0.8rem;
     color: #888;
 }
+
 .task-actions {
     margin-top: 8px;
 }

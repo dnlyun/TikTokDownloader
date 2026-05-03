@@ -84,8 +84,8 @@ class SlideshowCreator:
                 f"duration={self.TRANSITION_DURATION}:offset={offset:.4f}[xf0]"
             )
             for i in range(2, n):
-                prev = f"xf[i - 2]"
-                curr = f"xf[i - 1]"
+                prev = f"xf{i - 2}"
+                curr = f"xf{i - 1}"
                 off = (i) * (self.DISPLAY_DURATION - self.TRANSITION_DURATION)
                 filter_parts.append(
                     f"[{prev}][img{i}]xfade=transition={self.TRANSITION_TYPE}:"
@@ -111,7 +111,7 @@ class SlideshowCreator:
     async def _detect_canvas_size(self, image_paths: list[Path]) -> tuple[int, int]:
         max_w, max_h = 0, 0
         for img in image_paths:
-            cmd =[
+            cmd = [
                 "ffprobe", "-v", "quiet", "-print_format", "json",
                 "-show_streams", str(img),
             ]
@@ -136,7 +136,7 @@ class SlideshowCreator:
         return max_w + (max_w % 2), max_h + (max_h % 2)
 
     async def _get_audio_duration(self, audio_path: Path) -> float:
-        cmd =[
+        cmd = [
             "ffprobe", "-v", "quiet", "-print_format", "json",
             "-show_format", str(audio_path),
         ]

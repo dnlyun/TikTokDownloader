@@ -60,7 +60,7 @@ async def start_download(request: DownloadRequest):
         "message": "Queued",
         "file_path": None,
         "error": None,
-        "number": number
+        "number": number,
     }
     asyncio.create_task(_run_download(task_id, request.url, number))
     return JSONResponse({"task_id": task_id, "number": number})
@@ -78,7 +78,7 @@ async def websocket_progress(websocket: WebSocket, task_id: str):
     try:
         while True:
             await websocket.receive_text()
-    except WebSocketDisconnet:
+    except WebSocketDisconnect:
         connections.pop(task_id, None)
 
 @app.get("/api/status/{task_id}")
@@ -95,7 +95,7 @@ async def download_file(task_id: str):
     return FileResponse(
         task["file_path"],
         filename=Path(task["file_path"]).name,
-        media_type="video/mp4"
+        media_type="video/mp4",
     )
 
 async def _send_progress(task_id: str, progress: int, message: str, status: str = "processing"):
@@ -109,7 +109,7 @@ async def _send_progress(task_id: str, progress: int, message: str, status: str 
 
 async def _run_download(task_id: str, url: str, number: int):
     try:
-        downloader = TiktokDownloader(TEMP_DIR, DOWNLOADS_DIR)
+        downloader = TikTokDownloader(TEMP_DIR, DOWNLOADS_DIR)
         result_path = await downloader.download(
             url,
             output_filename=str(number),
@@ -119,7 +119,7 @@ async def _run_download(task_id: str, url: str, number: int):
             "status": "completed",
             "progress": 100,
             "message": "Done!",
-            "file_path": str(result_path)
+            "file_path": str(result_path),
         })
         await _send_progress(task_id, 100, "Done!", "completed")
     except Exception as e:

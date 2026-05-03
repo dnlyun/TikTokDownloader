@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const dropZone = document.getElementById("drop-zone");
     const urlInput = document.getElementById("url-input");
     const downloadBtn = document.getElementById("download-btn");
-    const taskList = document.getElementById("task-list")
+    const taskList = document.getElementById("task-list");
 
     function isValidUrl(text) {
         return /^https?:\/\/(www\.|vm\.)?tiktok\.com\/.+/.test(text.trim());
@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     urlInput.addEventListener("keydown", (e) => {
-        if (e.key == "Enter") downloadBtn.click();
+        if (e.key === "Enter") downloadBtn.click();
     });
 
     urlInput.addEventListener("paste", () => {
@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url }),
             });
-            const data = await resp.json()
+            const data = await resp.json();
             updateCardNumber(card, data.number);
             connectProgress(card, data.task_id);
         } catch (err) {
@@ -83,7 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function connectProgress(card, taskId) {
-        const proto = location.protocol == "https:" ? "wss:" : "ws:";
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
         const ws = new WebSocket(`${proto}//${location.host}/ws/${taskId}`);
 
         ws.onmessage = (e) => {
@@ -101,7 +101,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch (_) {}
         }, 3000);
 
-        ws.onclose = () => {}
+        ws.onclose = () => {};
         card._pollInterval = poll;
     }
 
@@ -119,7 +119,8 @@ document.addEventListener("DOMContentLoaded", () => {
             status.textContent = "Done";
             bar.style.width = "100%";
             bar.style.background = "#4caf50";
-            actions.innerHTML = `<a class="save-btn" href=/api/download/${taskId}" download>Save File</a>`;
+            actions.innerHTML = `<a class="save-btn" href="/api/download/${taskId}" download>Save File</a>`;
+            if (card._pollInterval) clearInterval(card._pollInterval);
         } else if (data.status === "error") {
             status.className = "task-status error";
             status.textContent = "Error";
@@ -132,6 +133,6 @@ document.addEventListener("DOMContentLoaded", () => {
         card.querySelector(".task-status").className = "task-status error";
         card.querySelector(".task-status").textContent = "Error";
         card.querySelector(".task-message").textContent = message;
-        card.querySelector(".progress-bard").style.background = "#f44336"
+        card.querySelector(".progress-bar").style.background = "#f44336";
     }
 });

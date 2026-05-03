@@ -27,10 +27,10 @@ pyinstaller \
     --hidden-import websockets \
     --hidden-import yt_dlp \
     --hidden-import aiohttp \
-    --collect-all yt_dlp
+    --collect-all yt_dlp \
     --noconfirm \
     main.py
 
 echo ""
-echo "Build complete: dist/tiktok-dowbloader"
+echo "Build complete: dist/tiktok-downloader"
 echo "Run it with: ./dist/tiktok-downloader"

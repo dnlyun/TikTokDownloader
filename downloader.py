@@ -17,10 +17,10 @@ class TikTokDownloader:
         self.output_dir = output_dir
 
     async def download(
-            self,
-            url: str,
-            output_filename: str,
-            progress_callback: Optional[Callable[[int, str], Awaitable[None]]] = None,
+        self,
+        url: str,
+        output_filename: str,
+        progress_callback: Optional[Callable[[int, str], Awaitable[None]]] = None,
     ) -> Path:
         await self._notify(progress_callback, 5, "Extracting post info...")
         info = await self._extract_info(url)
@@ -55,10 +55,10 @@ class TikTokDownloader:
 
         def _download():
             ydl_opts = {
-                "format": "bestvideo_bestaudio/best",
+                "format": "bestvideo+bestaudio/best",
                 "merge_output_format": "mp4",
                 "outtmpl": str(output_path),
-                "quiet": True
+                "quiet": True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
@@ -102,16 +102,16 @@ class TikTokDownloader:
             async with aiohttp.ClientSession() as session:
                 headers = {
                     "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64l x64) "
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                     ),
-                    "Accept": "text/html,application/xhtml+xml"
+                    "Accept": "text/html,application/xhtml+xml",
                 }
                 async with session.get(url, headers=headers, allow_redirects=True) as resp:
                     html = await resp.text()
 
             image_urls = self._parse_images_from_html(html)
-        except:
+        except Exception:
             pass
 
         # Strategy 2: Use yt-dlp thumbnails as fallback
@@ -146,7 +146,7 @@ class TikTokDownloader:
                     for _item_id, item in data.get("ItemModule", {}).items():
                         images = item.get("imagePost", {}).get("images", [])
                         for img in images:
-                            url_list = im.get("imageURL", {}).get("urlList", [])
+                            url_list = img.get("imageURL", {}).get("urlList", [])
                             if url_list:
                                 urls.append(url_list[0])
                 except (json.JSONDecodeError, KeyError, TypeError):
@@ -156,7 +156,7 @@ class TikTokDownloader:
 
     def _parse_images_from_info(self, info: dict) -> list[str]:
         urls = []
-        skip_ids = ["cover", "origin_cover", "dynamic_cover", "ai_dynamic_cover", "animated_cover"]
+        skip_ids = {"cover", "origin_cover", "dynamic_cover", "ai_dynamic_cover", "animated_cover"}
         for t in info.get("thumbnails", []):
             if t.get("id") not in skip_ids and t.get("url"):
                 urls.append(t["url"])
@@ -181,7 +181,7 @@ class TikTokDownloader:
         return audio_files[0]
 
     async def _download_images(
-            self, image_urls: list[str], work_dir: Path, callback
+        self, image_urls: list[str], work_dir: Path, callback
     ) -> list[Path]:
         async with aiohttp.ClientSession() as session:
             tasks = []
@@ -217,7 +217,6 @@ class TikTokDownloader:
         async with session.get(url, headers=headers) as resp:
             if resp.status == 200:
                 path.write_bytes(await resp.read())
-        return
 
     @staticmethod
     async def _notify(callback, progress: int, message: str):
