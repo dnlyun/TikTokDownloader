@@ -1,7 +1,10 @@
-import sys
+import os
 import threading
 import time
 import webbrowser
+from pathlib import Path
+
+os.chdir(Path(__file__).parent)
 
 import uvicorn
 
