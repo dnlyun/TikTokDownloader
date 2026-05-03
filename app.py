@@ -1,5 +1,4 @@
 import asyncio
-import sys
 import uuid
 from pathlib import Path
 from threading import Lock
@@ -13,13 +12,7 @@ from downloader import TikTokDownloader
 
 app = FastAPI()
 
-if getattr(sys, "frozen", False):
-    _BUNDLE_DIR = Path(sys._MEIPASS)
-    BASE_DIR = Path(sys.executable).parent
-else:
-    _BUNDLE_DIR = Path(__file__).parent
-    BASE_DIR = _BUNDLE_DIR
-
+BASE_DIR = Path("")
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 TEMP_DIR = BASE_DIR / "temp"
 
@@ -39,7 +32,7 @@ def _next_number() -> int:
 class DownloadRequest(BaseModel):
     url: str
 
-app.mount("/static", StaticFiles(directory=str(_BUNDLE_DIR / "static")), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.on_event("startup")
 async def startup():
@@ -48,7 +41,7 @@ async def startup():
 
 @app.get("/")
 async def root():
-    return FileResponse(str(_BUNDLE_DIR / "static" / "index.html"))
+    return FileResponse("static/index.html")
 
 @app.post("/api/download")
 async def start_download(request: DownloadRequest):
