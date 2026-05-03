@@ -5,10 +5,16 @@ import shutil
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
+import ssl
+
 import aiohttp
 import yt_dlp
 
 from slideshow import SlideshowCreator
+
+_ssl_ctx = ssl.create_default_context()
+_ssl_ctx.check_hostname = False
+_ssl_ctx.verify_mode = ssl.CERT_NONE
 
 
 class TikTokDownloader:
@@ -25,6 +31,9 @@ class TikTokDownloader:
         await self._notify(progress_callback, 5, "Extracting post info...")
         info = await self._extract_info(url)
 
+        if info is None:
+            raise ValueError("yt-dlp could not extract info from this URL")
+
         if self._is_slideshow(info):
             await self._notify(progress_callback, 10, "Detected slideshow post")
             return await self._handle_slideshow(url, info, output_filename, progress_callback)
@@ -34,7 +43,7 @@ class TikTokDownloader:
 
     async def _extract_info(self, url: str) -> dict:
         loop = asyncio.get_event_loop()
-        ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": False}
+        ydl_opts = {"quiet": True, "no_warnings": True, "extract_flat": False, "nocheckcertificate": True}
 
         def _extract():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -59,6 +68,7 @@ class TikTokDownloader:
                 "merge_output_format": "mp4",
                 "outtmpl": str(output_path),
                 "quiet": True,
+                "nocheckcertificate": True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
@@ -97,9 +107,8 @@ class TikTokDownloader:
     async def _extract_slideshow_images(self, url: str, info: dict) -> list[str]:
         image_urls = []
 
-        # Strategy 1: Fetch webpage and parse embedded JSON
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=_ssl_ctx)) as session:
                 headers = {
                     "User-Agent": (
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -114,7 +123,6 @@ class TikTokDownloader:
         except Exception:
             pass
 
-        # Strategy 2: Use yt-dlp thumbnails as fallback
         if not image_urls:
             image_urls = self._parse_images_from_info(info)
 
@@ -170,6 +178,7 @@ class TikTokDownloader:
                 "format": "bestaudio[ext=m4a]/bestaudio",
                 "outtmpl": str(work_dir / "audio.%(ext)s"),
                 "quiet": True,
+                "nocheckcertificate": True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
@@ -183,7 +192,7 @@ class TikTokDownloader:
     async def _download_images(
         self, image_urls: list[str], work_dir: Path, callback
     ) -> list[Path]:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=_ssl_ctx)) as session:
             tasks = []
             paths = []
             for i, img_url in enumerate(image_urls):

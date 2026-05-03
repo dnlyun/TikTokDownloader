@@ -113,7 +113,7 @@ async def _run_download(task_id: str, url: str, number: int):
         result_path = await downloader.download(
             url,
             output_filename=str(number),
-            progress_callback=lambda p, m: _send_progress(task_id, p, m)
+            progress_callback=lambda p, m: _send_progress(task_id, p, m),
         )
         tasks[task_id].update({
             "status": "completed",
