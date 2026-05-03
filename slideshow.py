@@ -72,11 +72,11 @@ class SlideshowCreator:
             for i in range(2, n):
                 filters.append(
                     f"[xf{i - 2}][img{i}]xfade=transition={self.TRANSITION_TYPE}:"
-                    f"duration={self.TRANSITION_DURATION}:offset={eff:.4f}[xf{i - 1}]"
+                    f"duration={self.TRANSITION_DURATION}:offset={i * eff:.4f}[xf{i - 1}]"
                 )
             final = f"xf{n - 2}"
 
-        cmd.extend(["-filter_complex", ";\n".join(filters)])
+        cmd.extend(["-filter_complex", ";".join(filters)])
         cmd.extend([
             "-map", f"[{final}]", "-map", f"{n}:a",
             "-c:v", "libx264", "-preset", "medium", "-crf", "18",
