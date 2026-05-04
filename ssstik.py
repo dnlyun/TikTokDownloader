@@ -12,11 +12,9 @@ class RateLimitError(Exception):
 class SsstikDownloader:
     SSSTIK_URL = "https://ssstik.io"
     AD_TIMEOUT = 90
-    RATE_LIMIT_WAIT = 12
 
-    def __init__(self, output_dir: Path, counter_file: Path):
+    def __init__(self, output_dir: Path):
         self.output_dir = output_dir
-        self.counter_file = counter_file
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = None
         self._browser = None
@@ -137,13 +135,11 @@ class SsstikDownloader:
 
         while asyncio.get_event_loop().time() - start < self.AD_TIMEOUT:
             close_el = None
-            close_frame = None
             for frame in page.frames:
                 try:
                     el = await frame.query_selector("div.continue-prompt-text")
                     if el and await el.is_visible():
                         close_el = el
-                        close_frame = frame
                         break
                 except Exception:
                     continue

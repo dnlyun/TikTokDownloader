@@ -9,13 +9,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# from downloader import TikTokDownloader
 from ssstik import RateLimitError, SsstikDownloader
 
 app = FastAPI()
 
-BASE_DIR = Path("")
-DOWNLOADS_DIR = BASE_DIR / "downloads"
+DOWNLOADS_DIR = Path("downloads")
 COUNTER_FILE = Path("counter.txt")
 
 _counter_lock = Lock()
@@ -26,13 +24,6 @@ def _load_counter() -> int:
         return int(COUNTER_FILE.read_text().strip())
     except (FileNotFoundError, ValueError):
         return 0
-
-
-def _next_number() -> int:
-    with _counter_lock:
-        n = _load_counter() + 1
-        COUNTER_FILE.write_text(str(n))
-        return n
 
 
 def _reserve_numbers(count: int) -> list[int]:
@@ -142,7 +133,7 @@ async def _send_ws(batch_id: str, data: dict):
 
 async def _run_batch(batch_id: str):
     batch = batches[batch_id]
-    downloader = SsstikDownloader(DOWNLOADS_DIR, COUNTER_FILE)
+    downloader = SsstikDownloader(DOWNLOADS_DIR)
 
     try:
         await downloader.start_browser()
