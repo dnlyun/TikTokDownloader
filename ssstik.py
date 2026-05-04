@@ -38,7 +38,6 @@ class SsstikDownloader:
             ),
         )
 
-
     async def close_browser(self):
         if self._context:
             await self._context.close()
@@ -104,32 +103,13 @@ class SsstikDownloader:
         await hd_btn.click()
         await self._notify(cb, 35, "Ad loading...")
 
-        try:
-            async with page.expect_download(timeout=self.AD_TIMEOUT * 1000) as dl_info:
-                await self._wait_for_ad(page, cb)
-                await page.wait_for_timeout(5000)
-            download = await dl_info.value
-        except Exception:
-            await self._notify(cb, 70, "Looking for download link...")
-            download = await self._try_fallback_download(page)
+        async with page.expect_download(timeout=self.AD_TIMEOUT * 1000) as dl_info:
+            await self._wait_for_ad(page, cb)
+            await page.wait_for_timeout(5000)
+        download = await dl_info.value
 
         await self._notify(cb, 90, "Saving file...")
         return await self._save_download(download, number)
-
-    async def _try_fallback_download(self, page: Page):
-        for selector in [
-            "a.without_watermark_hd[href*='tikcdn']",
-            "a.without_watermark[href*='tikcdn']",
-            "a[href*='tikcdn']",
-        ]:
-            link = await page.query_selector(selector)
-            if link:
-                href = await link.get_attribute("href")
-                if href and "tikcdn" in href:
-                    async with page.expect_download(timeout=30000) as dl_info:
-                        await link.click()
-                    return await dl_info.value
-        raise ValueError("No download link found after ad")
 
     async def _handle_slideshow(self, page: Page, number: int, cb) -> str:
         await self._notify(cb, 30, "Clicking slideshow download...")

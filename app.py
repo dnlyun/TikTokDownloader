@@ -150,7 +150,7 @@ async def _run_batch(batch_id: str):
         batch.status = "error"
         await _send_ws(batch_id, {
             "type": "batch_error",
-            "message": f"Failed to start browser:" {e},
+            "message": f"Failed to start browser: {e}",
         })
         return
 
@@ -211,7 +211,7 @@ async def _run_batch(batch_id: str):
 
 async def _download_one(
     batch_id: str, batch: BatchState, downloader: SsstikDownloader,
-    idx: int, url: str, number: int
+    idx: int, url: str, number: int,
 ):
     retries = 0
 

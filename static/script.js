@@ -223,7 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="progress-wrap"><div class="progress-bar"></div></div>
             <div class="task-message">Waiting...</div>
         `;
-        taskList.append(card);
+        taskList.appendChild(card);
         return card;
     }
 });
