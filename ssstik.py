@@ -143,7 +143,7 @@ class SsstikDownloader:
                     el = await frame.query_selector("div.continue-prompt-text")
                     if el and await el.is_visible():
                         close_el = el
-                        cloase_frame = frame
+                        close_frame = frame
                         break
                 except Exception:
                     continue
@@ -154,13 +154,13 @@ class SsstikDownloader:
                 if pct > last_report:
                     await self._notify(cb, 35 + pct, f"Waiting for ad... ({int(elapsed)}s)")
                     last_report = pct
-                await page.wait_for_timeout(500)
+                await page.wait_for_timeout(1000)
                 continue
 
             await self._notify(cb, 70, "Closing ad...")
-            await self.wait_for_timeout(2000)
+            await page.wait_for_timeout(2000)
             await close_el.click()
-            await page.wait_for_event(500)
+            await page.wait_for_timeout(500)
 
             confirmation = None
             for frame in page.frames:
