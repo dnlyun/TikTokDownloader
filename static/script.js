@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let urlQueue = [];
     let batchId = null;
     let batchRunning = false;
-    const activeCards = [];
+    const activeCards = {};
 
     function isValidUrl(text) {
         return /^https?:\/\/(www\.|vm\.)?tiktok\.com\/.+/.test(text.trim());
@@ -38,20 +38,20 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderQueue() {
         queueSection.style.display = urlQueue.length ? "block" : "none";
         downloadAllBtn.disabled = urlQueue.length === 0 || batchRunning;
-        queueCount.textContent = urlQueue.length + " link" + (urlQueue.length !== 1 ? "s": "");
+        queueCount.textContent = urlQueue.length + " link" + (urlQueue.length !== 1 ? "s" : "");
 
         queueList.innerHTML = "";
         urlQueue.forEach((url, i) => {
             const item = document.createElement("div");
             item.className = "queue-item";
-            item.innerHTML == `
+            item.innerHTML = `
                 <span class="queue-url" title="${url}">${url}</span>
                 <button class="remove-btn" data-index="${i}">&times;</button>
             `;
             queueList.appendChild(item);
         });
 
-        queueList.querySelector(".remove-btn").forEach((btn) => {
+        queueList.querySelectorAll(".remove-btn").forEach((btn) => {
             btn.addEventListener("click", () => {
                 removeFromQueue(parseInt(btn.dataset.index));
             });
@@ -61,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
     clearAllBtn.addEventListener("click", () => {
         urlQueue = [];
         renderQueue();
-    })
+    });
 
     dropZone.addEventListener("dragover", (e) => {
         e.preventDefault();
@@ -159,6 +159,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 downloadAllBtn.textContent = "Download All";
             }
         };
+
         ws.onopen = () => ws.send("ping");
         ws.onclose = () => {};
     }
@@ -220,9 +221,9 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
             <div class="task-url" title="${url}">${url}</div>
             <div class="progress-wrap"><div class="progress-bar"></div></div>
-            <div class="task-message">Starting...</div>
+            <div class="task-message">Waiting...</div>
         `;
-        taskList.prepend(card);
+        taskList.append(card);
         return card;
     }
 });

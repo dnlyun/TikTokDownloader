@@ -211,7 +211,7 @@ h1 {
 .task-status.processing { background: #2a2a00; color: #ffd700; }
 .task-status.completed  { background: #002a00; color: #4caf50; }
 .task-status.error      { background: #2a0000; color: #f44336; }
-.task-status.rate-limited {background: #2a1a00; color: #ff9800; }
+.task-status.rate-limited { background: #2a1a00; color: #ff9800; }
 
 .task-url {
     font-size: 0.7rem;
