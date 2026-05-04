@@ -87,7 +87,7 @@ class SsstikDownloader:
         return await self._handle_video_hd(page, number, cb)
 
     async def _detect_post_type(self, page: Page) -> str:
-        slideshow_btn = await page.query_selector("a:has-text('slideshow')")
+        slideshow_btn = await page.query_selector("a#slides_generate")
         if slideshow_btn and await slideshow_btn.is_visible():
             return "slideshow"
         return "video"
@@ -113,22 +113,20 @@ class SsstikDownloader:
 
     async def _handle_slideshow(self, page: Page, number: int, cb) -> str:
         await self._notify(cb, 30, "Clicking slideshow download...")
-        slideshow_btn = await page.query_selector("a:has-text('slideshow')")
+        slideshow_btn = await page.query_selector("a#slides_generate")
         if not slideshow_btn:
             raise ValueError("Slideshow download button not found")
 
         try:
-            async with page.expect_download(timeout=15000) as dl_info:
+            async with page.expect_download(timeout=30000) as dl_info:
                 await slideshow_btn.click()
             download = await dl_info.value
         except Exception:
             await self._notify(cb, 40, "Ad loading for slideshow...")
-            try:
-                async with page.expect_download(timeout=self.AD_TIMEOUT * 1000) as dl_info:
-                    await self._wait_for_ad(page, cb)
-                download = await dl_info.value
-            except Exception:
-                raise ValueError("Slideshow download failed")
+            async with page.expect_download(timeout=self.AD_TIMEOUT * 1000) as dl_info:
+                await self._wait_for_ad(page, cb)
+                await page.wait_for_timeout(5000)
+            download = await dl_info.value
 
         await self._notify(cb, 90, "Saving file...")
         return await self._save_download(download, number)
@@ -138,31 +136,58 @@ class SsstikDownloader:
         last_report = 0
 
         while asyncio.get_event_loop().time() - start < self.AD_TIMEOUT:
+            close_el = None
+            close_frame = None
             for frame in page.frames:
                 try:
-                    close_btn = await frame.query_selector(
-                        "button:has-text('Close'), [aria-label='Close'], "
-                        "button:has-text('close'), .close-button, "
-                        "#close-button, [class*='close']"
-                    )
-                    if close_btn:
-                        is_visible = await close_btn.is_visible()
-                        is_enabled = await close_btn.is_enabled()
-                        if is_visible and is_enabled:
-                            await page.wait_for_timeout(1500)
-                            await close_btn.click()
-                            await page.wait_for_timeout(500)
-                            return
+                    el = await frame.query_selector("div.continue-prompt-text")
+                    if el and await el.is_visible():
+                        close_el = el
+                        cloase_frame = frame
+                        break
                 except Exception:
                     continue
 
-            elapsed = asyncio.get_event_loop().time() - start
-            pct = min(int(elapsed / self.AD_TIMEOUT * 50), 50)
-            if pct > last_report:
-                await self._notify(cb, 35 + pct, f"Waiting for ad... ({int(elapsed)}s)")
-                last_report = pct
+            if not close_el:
+                elapsed = asyncio.get_event_loop().time() - start
+                pct = min(int(elapsed / self.AD_TIMEOUT * 50), 50)
+                if pct > last_report:
+                    await self._notify(cb, 35 + pct, f"Waiting for ad... ({int(elapsed)}s)")
+                    last_report = pct
+                await page.wait_for_timeout(500)
+                continue
 
-            await page.wait_for_timeout(500)
+            await self._notify(cb, 70, "Closing ad...")
+            await self.wait_for_timeout(2000)
+            await close_el.click()
+            await page.wait_for_event(500)
+
+            confirmation = None
+            for frame in page.frames:
+                try:
+                    confirmation = await frame.query_selector("div#close-confirmation-dialog")
+                    if confirmation and await confirmation.is_visible():
+                        break
+                    confirmation = None
+                except Exception:
+                    continue
+
+            if confirmation:
+                await self._notify(cb, 55, "Resuming ad...")
+                for frame in page.frames:
+                    try:
+                        resume_btn = await frame.query_selector("div#resume-ad-button")
+                        if resume_btn and await resume_btn.is_visible():
+                            await resume_btn.click()
+                            break
+                    except Exception:
+                        continue
+                await page.wait_for_timeout(15000)
+                continue
+
+            return
+
+        raise TimeoutError("Ad did not complete within timeout")
 
     async def _save_download(self, download, number: int) -> str:
         suggested = download.suggested_filename
