@@ -96,8 +96,6 @@ class SsstikDownloader:
         if not hd_btn:
             raise ValueError("HD download button not found")
 
-        page.on("popup", lambda popup: asyncio.create_task(popup.close()))
-
         await hd_btn.click()
         await self._notify(cb, 35, "Ad loading...")
 
