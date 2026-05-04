@@ -10,12 +10,27 @@
     <div class="container">
         <h1>TikTok Downloader</h1>
         <div id="drop-zone" class="drop-zone">
-            <p class="drop-text">Drop a TikTok link here</p>
+            <p class="drop-text">Drop TikTok links here</p>
             <span class="or">or</span>
             <div class="input-row">
                 <input type="url" id="url-input" placeholder="Paste TikTok URL..." autocomplete="off" />
-                <button id="download-btn">Download</button>
+                <button id="add-btn">Add</button>
             </div>
+        </div>
+        <div id="url-queue" class="url-queue" style="display:none;">
+            <div class="queue-header">
+                <span id="queue-count">0 lilnks</span>
+                <button id="clear-all-btn" class="clear-btn">Clear All</button>
+            </div>
+            <div id="queue-list" class="queue-list"></div>
+        </div>
+        <button id="download-all-btn" class="download-all-btn" disabled>Download All</button>
+        <div id="batch-progress" class="batch-progress" style="display:none;">
+            <div class="batch-status-text">
+                <span id="batch-status-msg">Starting...</span>
+                <span id="batch-counts"></span>
+            </div>
+            <div class="progress-wrap batch-bar"><div id="batch_bar" class="progress_bar"></div></div>
         </div>
         <div id="task-list" class="task-list"></div>
     </div>

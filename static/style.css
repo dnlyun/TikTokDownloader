@@ -12,7 +12,7 @@ body {
 
 .container {
     width: 100%;
-    max-width: 560px;
+    max-width: 620px;
 }
 
 h1 {
@@ -61,47 +61,149 @@ h1 {
 #url-input:focus {
     border-color: #fe2c55;
 }
-#download-btn {
+#add-btn {
     padding: 10px 20px;
     border-radius: 8px;
     border: none;
-    background: #fe2c55;
+    background: #333;
     color: #fff;
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
 }
-#download-btn:hover {
+#add-btn:hover {
+    background: #444;
+}
+
+.url-queue {
+    margin-top: 16px;
+    background: #1a1a1a;
+    border-radius: 10px;
+    border: 1px solid #262626;
+    overflow: hidden;
+}
+.queue-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #262626;
+    font-size: 0.85rem;
+    color: #aaa;
+}
+.clear-btn {
+    background: none;
+    border: none;
+    color: #f44336;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.clear-btn:hover {
+    text-decoration: underline;
+}
+.queue-list {
+    max-height: 280px;
+    overflow-y: auto;
+}
+.queue-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-bottom: 1px solid #1f1f1f;
+    gap: 8px;
+}
+.queue-item:last-child {
+    border-bottom: none;
+}
+.queue-url {
+    flex: 1;
+    font-size: 0.75rem;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.remove-btn {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+.remove-btn:hover {
+    color: #f44336;
+}
+
+.download-all-btn {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    background: #fe2c55;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+}
+.download-all-btn:hover:not(:disabled) {
     background: #e02348;
+}
+.download-all-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.batch-progress {
+    margin-top: 16px;
+    background: #1a1a1a;
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid #262626;
+}
+.batch-status-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: #aaa;
+    margin-bottom: 8px;
+}
+.batch-bar {
+    height: 8px;
 }
 
 .task-list {
-    margin-top: 20px;
+    margin-top: 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
 .task-card {
     background: #1a1a1a;
     border-radius: 10px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     border: 1px solid #262626;
 }
 .task-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 .task-number {
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: #fff;
 }
 .task-status {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     padding: 2px 8px;
     border-radius: 4px;
     font-weight: 600;
@@ -109,22 +211,23 @@ h1 {
 .task-status.processing { background: #2a2a00; color: #ffd700; }
 .task-status.completed  { background: #002a00; color: #4caf50; }
 .task-status.error      { background: #2a0000; color: #f44336; }
+.task-status.rate-limited {background: #2a1a00; color: #ff9800; }
 
 .task-url {
-    font-size: 0.75rem;
-    color: #666;
-    margin-bottom: 8px;
+    font-size: 0.7rem;
+    color: #555;
+    margin-bottom: 6px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .progress-wrap {
-    height: 6px;
+    height: 5px;
     background: #262626;
     border-radius: 3px;
     overflow: hidden;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 .progress-bar {
     height: 100%;
@@ -135,23 +238,17 @@ h1 {
 }
 
 .task-message {
-    font-size: 0.8rem;
-    color: #888;
+    font-size: 0.75rem;
+    color: #666;
 }
 
-.task-actions {
-    margin-top: 8px;
+.queue-list::-webkit-scrollbar {
+    width: 6px;
 }
-.save-btn {
-    padding: 6px 14px;
-    border-radius: 6px;
-    border: none;
-    background: #25d366;
-    color: #fff;
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
+.queue-list::-webkit-scrollbar-track {
+    background: #1a1a1a;
 }
-.save-btn:hover { background: #1eb854; }
+.queue-list::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
