@@ -52,7 +52,7 @@ class BatchState:
 
     @property
     def completed_count(self) -> int:
-        return sum(1 for r in self.results.values() if r["status"] in ("completed", "status"))
+        return sum(1 for r in self.results.values() if r["status"] in ("completed", "error"))
 
     @property
     def successful_count(self) -> int:
@@ -97,7 +97,7 @@ async def root():
 
 
 @app.post("/api/batch")
-async def start_download(request: BatchRequest):
+async def start_batch(request: BatchRequest):
     batch_id = str(uuid.uuid4())
     numbers = _reserve_numbers(len(request.urls))
     batch = BatchState(urls=list(request.urls), numbers=numbers)
@@ -105,7 +105,7 @@ async def start_download(request: BatchRequest):
     asyncio.create_task(_run_batch(batch_id))
     return JSONResponse({
         "batch_id": batch_id,
-        "numbers": numbers
+        "numbers": numbers,
     })
 
 
@@ -150,7 +150,7 @@ async def _run_batch(batch_id: str):
         batch.status = "error"
         await _send_ws(batch_id, {
             "type": "batch_error",
-            "message": "f"Failed to start browser: {e},
+            "message": f"Failed to start browser:" {e},
         })
         return
 
@@ -204,14 +204,14 @@ async def _run_batch(batch_id: str):
     await _send_ws(batch_id, {
         "type": "batch_complete",
         "successful": batch.successful_count,
-        "failed": "batch.failed_count",
+        "failed": batch.failed_count,
         "total": len(batch.urls),
     })
 
 
 async def _download_one(
-        batch_id: str, batch: BatchState, downloader: SsstikDownloader,
-        idx: int, url: str, number: int
+    batch_id: str, batch: BatchState, downloader: SsstikDownloader,
+    idx: int, url: str, number: int
 ):
     retries = 0
 
@@ -248,6 +248,7 @@ async def _download_one(
                 "status": "completed",
                 "progress": 100,
                 "message": f"Saved as {filename}",
+                "filename": filename,
                 "completed_count": batch.completed_count,
                 "active_count": batch.active_count,
             })
@@ -270,6 +271,7 @@ async def _download_one(
                 "active_count": batch.active_count,
             })
             await asyncio.sleep(STAGGER_INTERVAL)
+
         except Exception as e:
             batch.results[idx] = {
                 "status": "error",

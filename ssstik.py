@@ -48,10 +48,10 @@ class SsstikDownloader:
             await self._playwright.stop()
 
     async def download_url(
-            self,
-            url: str,
-            number: int,
-            progress_callback: Optional[Callable[[int, str], Awaitable[None]]] = None,
+        self,
+        url: str,
+        number: int,
+        progress_callback: Optional[Callable[[int, str], Awaitable[None]]] = None,
     ) -> str:
         page = await self._context.new_page()
         try:
@@ -60,10 +60,10 @@ class SsstikDownloader:
             await page.close()
 
     async def _do_download(
-            self, page: Page, url: str, number: int, cb
+        self, page: Page, url: str, number: int, cb
     ) -> str:
         await self._notify(cb, 5, "Navigating to ssstik.io...")
-        await page.goto(self,self.SSSTIK_URL, wait_until="domcontentloaded")
+        await page.goto(self.SSSTIK_URL, wait_until="domcontentloaded")
         await page.wait_for_timeout(2000)
 
         self._check_rate_limit_text(await page.content())
@@ -118,7 +118,7 @@ class SsstikDownloader:
 
     async def _try_fallback_download(self, page: Page):
         for selector in [
-            "a.without_watermark_jd[href*='tikcdn']",
+            "a.without_watermark_hd[href*='tikcdn']",
             "a.without_watermark[href*='tikcdn']",
             "a[href*='tikcdn']",
         ]:
@@ -161,8 +161,8 @@ class SsstikDownloader:
             for frame in page.frames:
                 try:
                     close_btn = await frame.query_selector(
-                        "button.has-text('Close'), [aria-label='Close']",
-                        "button:has-text('close'), .close-button",
+                        "button:has-text('Close'), [aria-label='Close'], "
+                        "button:has-text('close'), .close-button, "
                         "#close-button, [class*='close']"
                     )
                     if close_btn:
@@ -179,7 +179,7 @@ class SsstikDownloader:
             elapsed = asyncio.get_event_loop().time() - start
             pct = min(int(elapsed / self.AD_TIMEOUT * 50), 50)
             if pct > last_report:
-                await self._notify(cb, 35 + pct, f"Waiting for addd... ({int(elapsed)}s)")
+                await self._notify(cb, 35 + pct, f"Waiting for ad... ({int(elapsed)}s)")
                 last_report = pct
 
             await page.wait_for_timeout(500)
