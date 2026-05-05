@@ -39,7 +39,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function isPhotoUrl(url) {
+        return /\/photo\//.test(url);
+    }
+
     async function loadThumbnail(url, container) {
+        if (isPhotoUrl(url)) {
+            const placeholder = document.createElement("div");
+            placeholder.className = "queue-thumb placeholder-thumb";
+            placeholder.textContent = "\ud83d\uddbc";
+            container.prepend(placeholder);
+            return;
+        }
+
         const data = await fetchOembed(url);
         if (!data || !data.thumbnail_url) return;
 
@@ -48,13 +60,6 @@ document.addEventListener("DOMContentLoaded", () => {
         img.className = "queue-thumb";
         img.alt = "";
         container.prepend(img);
-
-        const textEl = container.querySelector(".query-url") || container.querySelector(".task-url");
-        if (textEl && data.author_name) {
-            const caption = data.title ? data.title.slice(0, 50) : "";
-            textEl.textContent = `@${data.author_name}${caption ? " \u2014 " + caption : ""}`;
-            textEl.title = url;
-        }
     }
 
     function addToQueue(url) {
