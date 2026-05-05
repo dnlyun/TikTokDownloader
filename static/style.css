@@ -252,3 +252,19 @@ h1 {
     background: #333;
     border-radius: 3px;
 }
+
+.queue-thumb {
+    width: 36px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.task-card .queue-thumb {
+    width: 40px;
+    height: 54px;
+    border-radius: 5px;
+    float: left;
+    margin-right: 10px;
+    margin-bottom: 4px;
+}

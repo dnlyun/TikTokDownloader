@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let urlQueue = [];
     let batchRunning = false;
     const activeCards = {};
+    const oembedCache = new Map();
 
     function isValidUrl(text) {
         return /^https?:\/\/(www\.|vm\.)?tiktok\.com\/.+/.test(text.trim());
@@ -23,6 +24,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function extractUrls(text) {
         return text.trim().split(/\s+/).filter(isValidUrl);
+    }
+
+    async function fetchOembed(url) {
+        if (oembedCache.has(url)) return oembedCache.get(url);
+        try {
+            const resp = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            oembedCache.set(url, data);
+            return data;
+        } catch {
+            return null;
+        }
+    }
+
+    async function loadThumbnail(url, container) {
+        const data = await fetchOembed(url);
+        if (!data || !data.thumbnail_url) return;
+
+        const img = document.createElement("img");
+        img.src = data.thumbnail_url;
+        img.className = "queue-thumb";
+        img.alt = "";
+        container.prepend(img);
+
+        const textEl = container.querySelector(".query-url") || container.querySelector(".task-url");
+        if (textEl && data.author_name) {
+            const caption = data.title ? data.title.slice(0, 50) : "";
+            textEl.textContent = `@${data.author_name}${caption ? " \u2014 " + caption : ""}`;
+            textEl.title = url;
+        }
     }
 
     function addToQueue(url) {
@@ -57,6 +89,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             item.append(span, btn);
             queueList.appendChild(item);
+
+            loadThumbnail(url, item);
         });
     }
 
@@ -217,6 +251,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         card.append(header, urlEl, progressWrap, msgEl);
         taskList.appendChild(card);
+
+        loadThumbnail(url, card);
+
         return card;
     }
 });
