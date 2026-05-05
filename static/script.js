@@ -165,12 +165,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const states = {
             completed: { label: "Done", color: "#4caf50", cls: "completed" },
-            error: { label: "Errpr", color: "#f44336", cls: "error" },
+            error: { label: "Error", color: "#f44336", cls: "error" },
             rate_limited: { label: "Rate Limited", color: "#ff9800", cls: "rate-limited" },
         };
 
         const state = states[d.status];
-
         if (state) {
             status.className = "task-status " + state.cls;
             status.textContent = state.label;
@@ -210,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const progressWrap = document.createElement("div");
         progressWrap.className = "progress-wrap";
-        progressWrap.innerHTML = `<div class="progress-bar"></div>`;
+        progressWrap.innerHTML = '<div class="progress-bar"></div>';
 
         const msgEl = document.createElement("div");
         msgEl.className = "task-message";
