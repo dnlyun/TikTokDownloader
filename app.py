@@ -125,7 +125,7 @@ async def _send_progress(batch_id: str, batch: BatchState, idx: int, status: str
         "url_index": idx,
         "total": len(batch.urls),
         "url": batch.urls[idx],
-        "nunmber": batch.numbers[idx],
+        "number": batch.numbers[idx],
         "status": status,
         "progress": progress,
         "message": message,
@@ -133,6 +133,7 @@ async def _send_progress(batch_id: str, batch: BatchState, idx: int, status: str
         "active_count": batch.active_count,
         **extra,
     })
+
 
 async def _run_batch(batch_id: str):
     batch = batches[batch_id]
@@ -184,7 +185,6 @@ async def _run_batch(batch_id: str):
 
 async def _download_one(batch_id: str, batch: BatchState, downloader: SsstikDownloader, idx: int):
     url, number = batch.urls[idx], batch.numbers[idx]
-    retries = 0
 
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -192,7 +192,6 @@ async def _download_one(batch_id: str, batch: BatchState, downloader: SsstikDown
                 await _send_progress(batch_id, batch, idx, "processing", progress, message)
 
             filename = await downloader.download_url(url, number, progress_cb)
-
             batch.results[idx] = {"status": "completed", "url": url, "number": number, "filename": filename}
             await _send_progress(batch_id, batch, idx, "completed", 100, f"Saved as {filename}", filename=filename)
             return
