@@ -132,17 +132,9 @@ class SsstikDownloader:
         last_report = 0
 
         while asyncio.get_event_loop().time() - start < self.AD_TIMEOUT:
-            close_el = None
-            for frame in page.frames:
-                try:
-                    el = await frame.query_selector("div.continue-prompt-text")
-                    if el and await el.is_visible():
-                        close_el = el
-                        break
-                except Exception:
-                    continue
+            clicked = await self._try_click_dismiss(page)
 
-            if not close_el:
+            if not clicked:
                 elapsed = asyncio.get_event_loop().time() - start
                 pct = min(int(elapsed / self.AD_TIMEOUT * 50), 50)
                 if pct > last_report:
@@ -151,37 +143,59 @@ class SsstikDownloader:
                 await page.wait_for_timeout(1000)
                 continue
 
-            await self._notify(cb, 70, "Closing ad...")
-            await page.wait_for_timeout(2000)
-            await close_el.click()
             await page.wait_for_timeout(500)
+            resumed = await self._check_and_resume(page)
 
-            confirmation = None
-            for frame in page.frames:
-                try:
-                    confirmation = await frame.query_selector("div#close-confirmation-dialog")
-                    if confirmation and await confirmation.is_visible():
-                        break
-                    confirmation = None
-                except Exception:
-                    continue
-
-            if confirmation:
+            if resumed:
                 await self._notify(cb, 55, "Resuming ad...")
-                for frame in page.frames:
-                    try:
-                        resume_btn = await frame.query_selector("div#resume-ad-button")
-                        if resume_btn and await resume_btn.is_visible():
-                            await resume_btn.click()
-                            break
-                    except Exception:
-                        continue
                 await page.wait_for_timeout(15000)
                 continue
 
+            await self._notify(cb, 70, "Ad closed!")
             return
 
         raise TimeoutError("Ad did not complete within timeout")
+
+    async def _get_all_frames(self, page: Page) -> list:
+        frames = []
+
+        async def _collect(parent_frame):
+            iframes = await parent_frame.query_selector_all("iframe")
+            for iframe_el in iframes:
+                try:
+                    frame = await iframe_el.content_frame()
+                    if frame:
+                        frames.append(frame)
+                        await _collect(frame)
+                except Exception:
+                    continue
+
+        await _collect(page)
+        return frames
+
+    async def _try_click_dismiss(self, page: Page) -> bool:
+        for frame in await self._get_all_frames(page):
+            try:
+                btn = await frame.query_selector("#dismiss-button-element")
+                if btn and await btn.is_visible():
+                    await btn.click()
+                    return True
+            except Exception:
+                continue
+        return False
+
+    async def _check_and_resume(self, page: Page) -> bool:
+        for frame in await self._get_all_frames(page):
+            try:
+                dialog = await frame.query_selector("#close-confirmation-dialog")
+                if dialog and await dialog.is_visible():
+                    resume_btn = await frame.query_selector("#resume-ad-button")
+                    if resume_btn:
+                        await resume_btn.click()
+                    return True
+            except Exception:
+                continue
+        return False
 
     async def _save_download(self, download, number: int) -> str:
         suggested = download.suggested_filename
