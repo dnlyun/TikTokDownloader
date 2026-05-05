@@ -15,6 +15,8 @@ app = FastAPI()
 
 DOWNLOADS_DIR = Path("downloads")
 COUNTER_FILE = Path("counter.txt")
+STAGGER_INTERVAL = 12
+MAX_RETRIES = 1
 
 _counter_lock = Lock()
 
@@ -46,23 +48,12 @@ class BatchState:
         return sum(1 for r in self.results.values() if r["status"] in ("completed", "error"))
 
     @property
-    def successful_count(self) -> int:
-        return sum(1 for r in self.results.values() if r["status"] == "completed")
-
-    @property
-    def failed_count(self) -> int:
-        return sum(1 for r in self.results.values() if r["status"] == "error")
-
-    @property
     def active_count(self) -> int:
         return sum(1 for r in self.results.values() if r["status"] == "processing")
 
 
 batches: dict[str, BatchState] = {}
 ws_connections: dict[str, WebSocket] = {}
-
-STAGGER_INTERVAL = 12
-MAX_RETRIES = 1
 
 
 class BatchRequest(BaseModel):
@@ -94,10 +85,7 @@ async def start_batch(request: BatchRequest):
     batch = BatchState(urls=list(request.urls), numbers=numbers)
     batches[batch_id] = batch
     asyncio.create_task(_run_batch(batch_id))
-    return JSONResponse({
-        "batch_id": batch_id,
-        "numbers": numbers,
-    })
+    return JSONResponse({"batch_id": batch_id, "numbers": numbers})
 
 
 @app.post("/api/batch/add")
@@ -131,6 +119,21 @@ async def _send_ws(batch_id: str, data: dict):
             ws_connections.pop(batch_id, None)
 
 
+async def _send_progress(batch_id: str, batch: BatchState, idx: int, status: str, progress: int, message: str, **extra):
+    await _send_ws(batch_id, {
+        "type": "progress",
+        "url_index": idx,
+        "total": len(batch.urls),
+        "url": batch.urls[idx],
+        "nunmber": batch.numbers[idx],
+        "status": status,
+        "progress": progress,
+        "message": message,
+        "completed_count": batch.completed_count,
+        "active_count": batch.active_count,
+        **extra,
+    })
+
 async def _run_batch(batch_id: str):
     batch = batches[batch_id]
     downloader = SsstikDownloader(DOWNLOADS_DIR)
@@ -139,10 +142,7 @@ async def _run_batch(batch_id: str):
         await downloader.start_browser()
     except Exception as e:
         batch.status = "error"
-        await _send_ws(batch_id, {
-            "type": "batch_error",
-            "message": f"Failed to start browser: {e}",
-        })
+        await _send_ws(batch_id, {"type": "batch_error", "message": f"Failed to start browser: {e}"})
         return
 
     in_flight: list[asyncio.Task] = []
@@ -151,26 +151,10 @@ async def _run_batch(batch_id: str):
         while batch.next_launch < len(batch.urls) or in_flight:
             if batch.next_launch < len(batch.urls):
                 idx = batch.next_launch
-                url = batch.urls[idx]
-                number = batch.numbers[idx]
-                batch.results[idx] = {"status": "processing", "url": url, "number": number}
+                batch.results[idx] = {"status": "processing", "url": batch.urls[idx], "number": batch.numbers[idx]}
+                await _send_progress(batch_id, batch, idx, "starting", 0, "Starting...")
 
-                await _send_ws(batch_id, {
-                    "type": "progress",
-                    "url_index": idx,
-                    "total": len(batch.urls),
-                    "url": url,
-                    "number": number,
-                    "status": "starting",
-                    "progress": 0,
-                    "message": "Starting...",
-                    "completed_count": batch.completed_count,
-                    "active_count": batch.active_count,
-                })
-
-                task = asyncio.create_task(
-                    _download_one(batch_id, batch, downloader, idx, url, number)
-                )
+                task = asyncio.create_task(_download_one(batch_id, batch, downloader, idx))
                 in_flight.append(task)
                 batch.next_launch += 1
 
@@ -178,9 +162,7 @@ async def _run_batch(batch_id: str):
                     await asyncio.sleep(STAGGER_INTERVAL)
             else:
                 if in_flight:
-                    done, pending = await asyncio.wait(
-                        in_flight, return_when=asyncio.FIRST_COMPLETED
-                    )
+                    done, pending = await asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
                     in_flight = list(pending)
 
             in_flight = [t for t in in_flight if not t.done()]
@@ -194,111 +176,40 @@ async def _run_batch(batch_id: str):
     batch.status = "completed"
     await _send_ws(batch_id, {
         "type": "batch_complete",
-        "successful": batch.successful_count,
-        "failed": batch.failed_count,
+        "successful": sum(1 for r in batch.results.values() if r["status"] == "completed"),
+        "failed": sum(1 for r in batch.results.values() if r["status"] == "error"),
         "total": len(batch.urls),
     })
 
 
-async def _download_one(
-    batch_id: str, batch: BatchState, downloader: SsstikDownloader,
-    idx: int, url: str, number: int,
-):
+async def _download_one(batch_id: str, batch: BatchState, downloader: SsstikDownloader, idx: int):
+    url, number = batch.urls[idx], batch.numbers[idx]
     retries = 0
 
-    while retries <= MAX_RETRIES:
+    for attempt in range(MAX_RETRIES + 1):
         try:
             async def progress_cb(progress: int, message: str):
-                await _send_ws(batch_id, {
-                    "type": "progress",
-                    "url_index": idx,
-                    "total": len(batch.urls),
-                    "url": url,
-                    "number": number,
-                    "status": "processing",
-                    "progress": progress,
-                    "message": message,
-                    "completed_count": batch.completed_count,
-                    "active_count": batch.active_count,
-                })
+                await _send_progress(batch_id, batch, idx, "processing", progress, message)
 
             filename = await downloader.download_url(url, number, progress_cb)
 
-            batch.results[idx] = {
-                "status": "completed",
-                "url": url,
-                "number": number,
-                "filename": filename,
-            }
-            await _send_ws(batch_id, {
-                "type": "progress",
-                "url_index": idx,
-                "total": len(batch.urls),
-                "url": url,
-                "number": number,
-                "status": "completed",
-                "progress": 100,
-                "message": f"Saved as {filename}",
-                "filename": filename,
-                "completed_count": batch.completed_count,
-                "active_count": batch.active_count,
-            })
+            batch.results[idx] = {"status": "completed", "url": url, "number": number, "filename": filename}
+            await _send_progress(batch_id, batch, idx, "completed", 100, f"Saved as {filename}", filename=filename)
             return
 
         except RateLimitError:
-            retries += 1
-            if retries > MAX_RETRIES:
+            if attempt >= MAX_RETRIES:
                 break
-            await _send_ws(batch_id, {
-                "type": "progress",
-                "url_index": idx,
-                "total": len(batch.urls),
-                "url": url,
-                "number": number,
-                "status": "rate_limited",
-                "progress": 0,
-                "message": f"Rate limited, retrying in {STAGGER_INTERVAL}s ({retries}/{MAX_RETRIES})",
-                "completed_count": batch.completed_count,
-                "active_count": batch.active_count,
-            })
+            await _send_progress(
+                batch_id, batch, idx, "rate_limited", 0,
+                f"Rate limited, retrying in {STAGGER_INTERVAL}s ({attempt + 1}/{MAX_RETRIES})",
+            )
             await asyncio.sleep(STAGGER_INTERVAL)
 
         except Exception as e:
-            batch.results[idx] = {
-                "status": "error",
-                "url": url,
-                "number": number,
-                "error": str(e),
-            }
-            await _send_ws(batch_id, {
-                "type": "progress",
-                "url_index": idx,
-                "total": len(batch.urls),
-                "url": url,
-                "number": number,
-                "status": "error",
-                "progress": 0,
-                "message": str(e),
-                "completed_count": batch.completed_count,
-                "active_count": batch.active_count,
-            })
+            batch.results[idx] = {"status": "error", "url": url, "number": number, "error": str(e)}
+            await _send_progress(batch_id, batch, idx, "error", 0, str(e))
             return
 
-    batch.results[idx] = {
-        "status": "error",
-        "url": url,
-        "number": number,
-        "error": "Rate limited after max retries",
-    }
-    await _send_ws(batch_id, {
-        "type": "progress",
-        "url_index": idx,
-        "total": len(batch.urls),
-        "url": url,
-        "number": number,
-        "status": "error",
-        "progress": 0,
-        "message": "Rate limited after max retries",
-        "completed_count": batch.completed_count,
-        "active_count": batch.active_count,
-    })
+    batch.results[idx] = {"status": "error", "url": url, "number": number, "error": "Rate limited after max retries"}
+    await _send_progress(batch_id, batch, idx, "error", 0, "Rate limited after max retries")

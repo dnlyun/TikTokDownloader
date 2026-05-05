@@ -72,15 +72,15 @@ class SsstikDownloader:
         await page.wait_for_timeout(1000)
         self._check_rate_limit(await page.content())
 
-        is_slideshow = await page.query_selector("a#slides_generate")
-        await self._notify(cb, 25, f"Detected {'is_slideshow' if is_slideshow else 'video'}")
+        is_slideshow = await page.query_selector("a#slides_generate:visible")
+        await self._notify(cb, 25, f"Detected {'slideshow' if is_slideshow else 'video'}")
 
         if is_slideshow:
             return await self._handle_slideshow(page, number, cb)
         return await self._handle_video_hd(page, number, cb)
 
     async def _handle_video_hd(self, page: Page, number: int, cb) -> str:
-        await self._notify(cb, 30, "Clicking 'HD download'...")
+        await self._notify(cb, 30, "Clicking HD download...")
         hd_btn = await page.wait_for_selector("#hd_download", timeout=10000)
         await hd_btn.click()
         await self._notify(cb, 35, "Ad loading...")
@@ -148,7 +148,7 @@ class SsstikDownloader:
         frames = []
 
         async def _walk(parent):
-            for iframe_el in await parent.query_selector_all("iframes"):
+            for iframe_el in await parent.query_selector_all("iframe"):
                 try:
                     frame = await iframe_el.content_frame()
                     if frame:
