@@ -24,7 +24,9 @@ class SsstikDownloader:
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             headless=False,
-            args=["--disable-blink-features=AutomationControlled"],
+            args=["--disable-blink-features=AutomationControlled",
+                  "--mute-audio",
+                  "--start-minimized"],
         )
         self._context = await self._browser.new_context(
             accept_downloads=True,
