@@ -16,7 +16,7 @@ app = FastAPI()
 DOWNLOADS_DIR = Path("downloads")
 COUNTER_FILE = Path("counter.txt")
 STAGGER_INTERVAL = 12
-MAX_RETRIES = 1
+MAX_RETRIES = 2
 
 _counter_lock = Lock()
 
@@ -40,6 +40,8 @@ class BatchState:
     urls: list[str]
     numbers: list[int]
     results: dict[int, dict] = field(default_factory=dict)
+    retry_queue: list[int] = field(default_factory=list)
+    attempts: dict[int, int] = field(default_factory=dict)
     next_launch: int = 0
     status: str = "running"
 
@@ -149,17 +151,23 @@ async def _run_batch(batch_id: str):
     in_flight: list[asyncio.Task] = []
 
     try:
-        while batch.next_launch < len(batch.urls) or in_flight:
-            if batch.next_launch < len(batch.urls):
+        while batch.next_launch < len(batch.urls) or batch.retry_queue or in_flight:
+            if batch.retry_queue:
+                idx = batch.retry_queue.pop(0)
+            elif batch.next_launch < len(batch.urls):
                 idx = batch.next_launch
+                batch.next_launch += 1
+            else:
+                idx = None
+
+            if idx is not None:
                 batch.results[idx] = {"status": "processing", "url": batch.urls[idx], "number": batch.numbers[idx]}
                 await _send_progress(batch_id, batch, idx, "starting", 0, "Starting...")
 
                 task = asyncio.create_task(_download_one(batch_id, batch, downloader, idx))
                 in_flight.append(task)
-                batch.next_launch += 1
 
-                if batch.next_launch < len(batch.urls):
+                if batch.retry_queue or batch.next_launch < len(batch.urls):
                     await asyncio.sleep(STAGGER_INTERVAL)
             else:
                 if in_flight:
@@ -185,30 +193,35 @@ async def _run_batch(batch_id: str):
 
 async def _download_one(batch_id: str, batch: BatchState, downloader: SsstikDownloader, idx: int):
     url, number = batch.urls[idx], batch.numbers[idx]
+    batch.attempts[idx] = batch.attempts.get(idx, 0) + 1
+    attempt = batch.attempts[idx]
 
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            async def progress_cb(progress: int, message: str):
-                await _send_progress(batch_id, batch, idx, "processing", progress, message)
+    async def progress_cb(progress: int, message: str):
+        await _send_progress(batch_id, batch, idx, "processing", progress, message)
 
-            filename = await downloader.download_url(url, number, progress_cb)
-            batch.results[idx] = {"status": "completed", "url": url, "number": number, "filename": filename}
-            await _send_progress(batch_id, batch, idx, "completed", 100, f"Saved as {filename}", filename=filename)
-            return
+    requeue_status = "processing"
+    try:
+        filename = await downloader.download_url(url, number, progress_cb)
+        batch.results[idx] = {"status": "completed", "url": url, "number": number, "filename": filename}
+        await _send_progress(batch_id, batch, idx, "completed", 100, f"Saved as {filename}", filename=filename)
+        return
 
-        except RateLimitError:
-            if attempt >= MAX_RETRIES:
-                break
-            await _send_progress(
-                batch_id, batch, idx, "rate_limited", 0,
-                f"Rate limited, retrying in {STAGGER_INTERVAL}s ({attempt + 1}/{MAX_RETRIES})",
-            )
-            await asyncio.sleep(STAGGER_INTERVAL)
+    except RateLimitError:
+        last_error = "Rate limited"
+        requeue_status = "rate_limited"
 
-        except Exception as e:
-            batch.results[idx] = {"status": "error", "url": url, "number": number, "error": str(e)}
-            await _send_progress(batch_id, batch, idx, "error", 0, str(e))
-            return
+    except Exception as e:
+        last_error = (str(e) or e.__class__.__name__).splitlines()[0][:200]
 
-    batch.results[idx] = {"status": "error", "url": url, "number": number, "error": "Rate limited after max retries"}
-    await _send_progress(batch_id, batch, idx, "error", 0, "Rate limited after max retries")
+
+    if attempt <= MAX_RETRIES:
+        batch.retry_queue.insert(0, idx)
+        batch.results[idx] = {"status": "retrying", "url": url, "number": number, "error": last_error}
+        await _send_progress(
+            batch_id, batch, idx, requeue_status, 0,
+            f"Failed ({last_error}); re-queued for retry ({attempt}/{MAX_RETRIES})",
+        )
+        return
+
+    batch.results[idx] = {"status": "error", "url": url, "number": number, "error": last_error}
+    await _send_progress(batch_id, batch, idx, "error", 0, last_error)

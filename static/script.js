@@ -97,6 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             loadThumbnail(url, item);
         });
+        queueList.scrollTop = queueList.scrollHeight;
     }
 
     $("clear-all-btn").addEventListener("click", () => {
