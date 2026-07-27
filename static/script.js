@@ -59,6 +59,10 @@ document.addEventListener("DOMContentLoaded", () => {
         img.src = data.thumbnail_url;
         img.className = "queue-thumb";
         img.alt = "";
+        img.addEventListener("load", () => {
+            const list = container.closest(".queue-list");
+            if (list) list.scrollTop = list.scrollHeight;
+        });
         container.prepend(img);
     }
 
