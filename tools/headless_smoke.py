@@ -23,9 +23,9 @@ async def run(args):
     results = []
     # Save screenshots before the production downloader closes a failed tab.
     original = downloader._do_download
-    async def observed(page, url, number, callback):
+    async def observed(page, url, number, callback, state=None):
         try:
-            return await original(page, url, number, callback)
+            return await original(page, url, number, callback, state)
         except Exception:
             try:
                 await page.screenshot(path=str(output / f"failure-{number}.png"), timeout=5000)

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TikTok Downloader</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=20261125-4">
 </head>
 <body>
     <div class="container">
@@ -25,7 +25,11 @@
             <div id="queue-list" class="queue-list"></div>
         </div>
         <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
-        <button id="download-all-btn" class="download-all-btn" disabled>Download All</button>
+        <div class="download-controls">
+            <label for="start-number">Start number</label>
+            <input id="start-number" type="number" min="1" max="2147483647" step="1" value="1" required>
+            <button id="download-all-btn" class="download-all-btn" disabled>Download All</button>
+        </div>
         <div id="batch-progress" class="batch-progress" style="display:none;">
             <div class="batch-status-text">
                 <span id="batch-status-msg">Starting...</span>
@@ -34,11 +38,16 @@
             <div class="progress-wrap batch-bar"><div id="batch-bar" class="progress-bar"></div></div>
             <div class="batch-actions">
                 <span id="connection-status" class="connection-status" role="status"></span>
-                <button id="retry-failed-btn" class="secondary-btn" hidden>Retry failed</button>
+                <div class="failed-actions">
+                    <button id="open-downloads-btn" class="secondary-btn">Open downloads folder</button>
+                    <button id="copy-failed-btn" class="secondary-btn" hidden>Copy failed links</button>
+                    <a id="save-failed-btn" class="secondary-btn" hidden>Save failed links</a>
+                    <button id="retry-failed-btn" class="secondary-btn" hidden>Retry failed</button>
+                </div>
             </div>
         </div>
         <div id="task-list" class="task-list" aria-label="Download status"></div>
     </div>
-    <script src="/static/script.js"></script>
+    <script src="/static/script.js?v=20261125-5"></script>
 </body>
 </html>

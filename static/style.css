@@ -75,6 +75,24 @@ h1 {
     cursor: pointer;
     white-space: nowrap;
 }
+
+.download-controls {
+    display: grid;
+    grid-template-columns: auto 110px 1fr;
+    gap: 10px;
+    align-items: center;
+    margin-top: 14px;
+}
+.download-controls label { color: #aaa; font-size: 0.9rem; }
+#start-number {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background: #1a1a1a;
+    color: #fff;
+}
+.download-controls .download-all-btn { margin-top: 0; }
 #add-btn:hover {
     background: #444;
 }
@@ -245,6 +263,22 @@ h1 {
     color: #aaa;
     overflow-wrap: anywhere;
 }
+.task-link-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+.task-link-actions[hidden] { display: none; }
+.task-link-btn {
+    border: 0;
+    background: none;
+    color: #8ab4f8;
+    padding: 0;
+    font: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    text-decoration: underline;
+}
 
 .feedback {
     margin-top: 10px;
@@ -261,6 +295,12 @@ h1 {
     gap: 12px;
     margin-top: 10px;
 }
+.failed-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
 .connection-status { color: #999; font-size: 0.75rem; }
 .secondary-btn {
     border: 1px solid #555;
@@ -270,6 +310,8 @@ h1 {
     color: #eee;
     cursor: pointer;
     white-space: nowrap;
+    text-decoration: none;
+    font-size: 0.8rem;
 }
 button:disabled { cursor: not-allowed; opacity: 0.45; }
 .task-status.queued { background: #262626; color: #bbb; }

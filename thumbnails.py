@@ -9,6 +9,15 @@ import httpx
 from fastapi import HTTPException
 from fastapi.responses import Response
 
+BROWSER_HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/158.0.0.0 Safari/537.36'
+    ),
+    'Accept-Language': 'en-US,en;q=0.9',
+}
+
 class PreviewParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -50,7 +59,15 @@ class Thumbnails:
         self.cache = {}
         self.pending = {}
         self.slots = asyncio.Semaphore(3)
-    async def get(self, url):
+        self.client = httpx.AsyncClient(
+            timeout=8, follow_redirects=False, headers=BROWSER_HEADERS,
+            limits=httpx.Limits(max_connections=6, max_keepalive_connections=3),
+        )
+    async def close(self):
+        await self.client.aclose()
+    async def get(self, url, *, refresh=False):
+        if refresh:
+            self.cache.pop(url, None)
         entry = self.cache.get(url)
         if entry and entry[0] > time.monotonic(): return entry[1]
         if url not in self.pending:
@@ -59,9 +76,11 @@ class Thumbnails:
         return await asyncio.shield(self.pending[url])
     async def fetch(self, url):
         result = None
+        resolved_url = url
         try:
             async with self.slots, asyncio.timeout(20):
-                async with httpx.AsyncClient(timeout=8, follow_redirects=False) as client:
+                client = self.client
+                try:
                     # oEmbed sometimes succeeds without including a thumbnail.
                     r = await client.get('https://www.tiktok.com/oembed', params={'url':url})
                     source = r.json().get('thumbnail_url') if r.status_code == 200 else None
@@ -72,23 +91,26 @@ class Thumbnails:
                             if r.is_redirect:
                                 from urllib.parse import urljoin
                                 current = urljoin(current, r.headers.get('location',''))
+                                resolved_url = current
                                 p = urlsplit(current)
                                 if p.scheme != 'https' or p.hostname not in ('www.tiktok.com','tiktok.com','vm.tiktok.com','vt.tiktok.com') or p.username or p.port not in (None,443): break
                                 continue
                             if r.status_code == 200:
                                 parser = PreviewParser(); parser.feed(r.text); source = parser.cover()
                             break
-                    if not source and re.search(r"/photo/\d+", url):
+                    if not source and re.search(r"/photo/\d+", resolved_url):
                         # TikTok's photo route may omit item data; the video route for
                         # that same post currently includes imagePost.images.
-                        preview_url = re.sub(r"/photo/(\d+)", r"/video/\1", url)
+                        preview_url = re.sub(r"/photo/(\d+)", r"/video/\1", resolved_url)
                         r = await client.get(preview_url)
                         if r.status_code == 200:
                             parser = PreviewParser()
                             parser.feed(r.text)
                             source = parser.cover()
                     if source and safe_image(source):
-                        async with client.stream('GET', source) as image:
+                        async with client.stream(
+                            'GET', source, headers={'Referer': 'https://www.tiktok.com/'}
+                        ) as image:
                             kind = image.headers.get('content-type','').split(';')[0]
                             if image.status_code == 200 and kind in ('image/jpeg','image/png','image/webp','image/avif'):
                                 body = bytearray()
@@ -96,12 +118,14 @@ class Thumbnails:
                                     body.extend(chunk)
                                     if len(body) > 5_000_000: raise ValueError('Thumbnail too large')
                                 if body: result = (bytes(body),kind)
+                except (httpx.HTTPError, ValueError, TypeError):
+                    pass
         except (httpx.HTTPError, ValueError, TypeError, TimeoutError):
             pass
         if len(self.cache) >= 32: self.cache.pop(next(iter(self.cache)))
         self.cache[url] = (time.monotonic() + (1800 if result else 20), result)
         return result
-    async def response(self, url):
-        result = await self.get(url)
+    async def response(self, url, *, refresh=False):
+        result = await self.get(url, refresh=refresh)
         if not result: raise HTTPException(404, 'Preview unavailable; click to retry')
         return Response(result[0], media_type=result[1], headers={'Cache-Control':'private, max-age=1800','X-Content-Type-Options':'nosniff'})

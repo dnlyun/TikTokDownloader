@@ -61,7 +61,11 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
     const dropZone = $("drop-zone");
     const urlInput = $("url-input");
     const downloadButton = $("download-all-btn");
+    const startNumberInput = $("start-number");
     const retryButton = $("retry-failed-btn");
+    const copyFailedButton = $("copy-failed-btn");
+    const saveFailedButton = $("save-failed-btn");
+    const openDownloadsButton = $("open-downloads-btn");
     const feedback = $("feedback");
     const queueRows = new Map();
     const cards = new Map();
@@ -88,6 +92,24 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
         feedback.classList.toggle("error", isError);
     }
 
+    async function copyText(text) {
+        if (!text) return false;
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch {
+            const field = document.createElement("textarea");
+            field.value = text;
+            field.style.position = "fixed";
+            field.style.opacity = "0";
+            document.body.appendChild(field);
+            field.select();
+            const copied = document.execCommand("copy");
+            field.remove();
+            return copied;
+        }
+    }
+
     function saveLocal() {
         try {
             localStorage.setItem(storageKey, JSON.stringify({ queue: urlQueue, batchId, pendingCreate }));
@@ -108,7 +130,13 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
         if (typeof saved.pendingCreate?.request_id === "string" && Array.isArray(saved.pendingCreate.urls)) {
             const urls = saved.pendingCreate.urls.filter(value => typeof value === "string").map(normalizeTikTokUrl).filter(Boolean);
             if (urls.length) {
-                pendingCreate = { request_id: saved.pendingCreate.request_id, urls };
+                const start = Number(saved.pendingCreate.start_number);
+                pendingCreate = {
+                    request_id: saved.pendingCreate.request_id,
+                    urls,
+                    start_number: Number.isSafeInteger(start) && start > 0 ? start : 1,
+                };
+                startNumberInput.value = String(pendingCreate.start_number);
                 for (const url of urls) if (!seen.has(tikTokKey(url))) {
                     seen.add(tikTokKey(url));
                     urlQueue.push(url);
@@ -151,7 +179,8 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
             const timer = setTimeout(() => resolve(false), 25000);
             image.onload = () => { clearTimeout(timer); resolve(true); };
             image.onerror = () => { clearTimeout(timer); resolve(false); };
-            image.src = `/api/thumbnail?url=${encodeURIComponent(url)}`;
+            const attempt = Number(target.dataset.thumbnailAttempt || 0);
+            image.src = `/api/thumbnail?url=${encodeURIComponent(url)}&attempt=${attempt}`;
         });
         if (!target.isConnected) return;
         if (success) placeholder.replaceWith(image);
@@ -173,10 +202,12 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
         placeholder.addEventListener("click", () => {
             if (placeholder.disabled) return;
             placeholder.disabled = true;
+            target.dataset.thumbnailAttempt = String(Number(target.dataset.thumbnailAttempt || 0) + 1);
             thumbnailJobs.push(target);
             pumpThumbnails();
         });
         target.dataset.thumbnailUrl = url;
+        target.dataset.thumbnailAttempt = "0";
         target.prepend(placeholder);
         if (thumbnailObserver) thumbnailObserver.observe(target);
         else setTimeout(() => { thumbnailJobs.push(target); pumpThumbnails(); }, 0);
@@ -188,9 +219,15 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
 
     function updateButtons() {
         downloadButton.disabled = submitting || restoring || (!urlQueue.length && !pendingCreate);
+        startNumberInput.disabled = submitting || Boolean(isRunning()) || Boolean(pendingCreate);
         downloadButton.textContent = submitting ? "Sending…" : pendingCreate ? "Retry sending batch" : isRunning() ? "Add to current batch" : "Download All";
         retryButton.hidden = !(snapshot?.failed > 0);
+        copyFailedButton.hidden = !(snapshot?.failed > 0);
+        saveFailedButton.hidden = !(snapshot?.failed > 0);
+        saveFailedButton.href = batchId ? `/api/batch/${encodeURIComponent(batchId)}/failed.txt` : "";
+        saveFailedButton.download = batchId ? `failed-${batchId}.txt` : "failed-links.txt";
         retryButton.disabled = submitting || restoring;
+        copyFailedButton.disabled = submitting || restoring;
         $("clear-all-btn").disabled = submitting || Boolean(pendingCreate);
     }
 
@@ -292,10 +329,16 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
 
     async function submitQueue() {
         if (submitting || restoring || (!urlQueue.length && !pendingCreate)) return;
+        const requestedStart = Number(startNumberInput.value);
+        if (!pendingCreate && !isRunning() && (!Number.isSafeInteger(requestedStart) || requestedStart < 1 || requestedStart > 2147483647)) {
+            message("Enter a whole-number start value of 1 or greater.", true);
+            startNumberInput.focus();
+            return;
+        }
         submitting = true;
         const appending = !pendingCreate && Boolean(isRunning());
         if (!appending && !pendingCreate) {
-            pendingCreate = { request_id: crypto.randomUUID(), urls: [...urlQueue] };
+            pendingCreate = { request_id: crypto.randomUUID(), urls: [...urlQueue], start_number: requestedStart };
             saveLocal();
         }
         const urls = appending ? [...urlQueue] : [...pendingCreate.urls];
@@ -341,9 +384,31 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
         progress.appendChild(bar);
         const detail = document.createElement("div");
         detail.className = "task-message";
-        card.append(header, url, progress, detail);
+        const actions = document.createElement("div");
+        actions.className = "task-link-actions";
+        actions.hidden = true;
+        const open = document.createElement("a");
+        open.className = "task-link-btn";
+        open.target = "_blank";
+        open.rel = "noopener noreferrer";
+        open.textContent = "Open TikTok";
+        open.href = result.url;
+        const copy = document.createElement("button");
+        copy.type = "button";
+        copy.className = "task-link-btn";
+        copy.textContent = "Copy link";
+        copy.addEventListener("click", async () => {
+            const copied = await copyText(result.url);
+            message(copied ? "Failed TikTok link copied." : "Could not copy the link; use Open TikTok instead.", !copied);
+        });
+        const retrieve = document.createElement("a");
+        retrieve.className = "task-link-btn";
+        retrieve.textContent = "Download file";
+        retrieve.hidden = true;
+        actions.append(retrieve, open, copy);
+        card.append(header, url, progress, detail, actions);
         addThumbnail(result.url, card);
-        return { element: card, number, status, bar, detail };
+        return { element: card, number, status, bar, detail, actions, open, copy, retrieve };
     }
 
     function applySnapshot(data) {
@@ -380,6 +445,16 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
             card.bar.style.width = `${result.status === "completed" ? 100 : Math.max(0, Math.min(100, result.progress || 0))}%`;
             card.bar.style.background = state[2];
             card.detail.textContent = result.message || result.error || (result.status === "queued" ? "Waiting…" : "");
+            const failed = result.status === "error";
+            const downloadable = result.status === "completed" && Boolean(result.filename);
+            card.open.hidden = !failed;
+            card.copy.hidden = !failed;
+            card.retrieve.hidden = !downloadable;
+            if (downloadable) {
+                card.retrieve.href = `/api/downloads/${encodeURIComponent(result.filename)}`;
+                card.retrieve.download = result.filename;
+            }
+            card.actions.hidden = !failed && !downloadable;
         }
         for (const [key, card] of cards) if (!seen.has(key)) {
             thumbnailObserver?.unobserve(card.element);
@@ -395,6 +470,7 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
         $("batch-status-msg").textContent = complete ? `${data.successful || 0} downloaded, ${data.failed || 0} failed` : `${completed} of ${data.total} finished`;
         $("batch-counts").textContent = complete ? "" : `${data.active_count || 0} active`;
         retryButton.textContent = `Retry ${data.failed || 0} failed`;
+        openDownloadsButton.title = data.download_directory || "Open the app downloads folder";
         updateButtons();
     }
 
@@ -549,11 +625,27 @@ if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded
             renderQueue();
         }
     });
+    copyFailedButton.addEventListener("click", async () => {
+        const links = (snapshot?.results || [])
+            .filter(result => result.status === "error")
+            .map(result => result.url)
+            .join("\n");
+        const copied = await copyText(links);
+        message(copied ? `${snapshot.failed} failed link${snapshot.failed === 1 ? "" : "s"} copied.` : "Could not copy failed links. Use Save failed links instead.", !copied);
+    });
+    openDownloadsButton.addEventListener("click", async () => {
+        try {
+            const data = await requestJson("/api/open-downloads", {});
+            message(`Opened ${data.path}`);
+        } catch (error) {
+            message(`Could not open downloads folder: ${error.message}`, true);
+        }
+    });
     setInterval(() => {
-        if (batchId && (!socket || socket.readyState !== WebSocket.OPEN || Date.now() - lastSnapshotAt > 15000)) refreshSnapshot();
+        if (batchId && (!socket || socket.readyState !== WebSocket.OPEN || Date.now() - lastSnapshotAt > 4000)) refreshSnapshot();
         else if (!batchId && needsDiscovery && !submitting) restoreBatch();
         if (socket?.readyState === WebSocket.OPEN) socket.send("ping");
-    }, 5000);
+    }, 3000);
     window.addEventListener("online", () => {
         if (batchId) { connectSocket(); refreshSnapshot(); }
         else restoreBatch();

@@ -21,7 +21,8 @@ def open_browser():
 def main():
     threading.Thread(target=open_browser, daemon=True).start()
     print(f"Starting TikTok Downloader on http://localhost:{PORT}")
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
+    print(f"Downloads will be saved to: {(Path(__file__).resolve().parent / 'downloads')}")
+    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info", access_log=True)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,12 @@
 import asyncio
 import json
 import logging
+import os
 import random
 import re
 import sqlite3
+import subprocess
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -11,7 +14,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -19,8 +22,23 @@ import ssstik
 from thumbnails import Thumbnails
 
 LOG = logging.getLogger(__name__)
-MAX_CONCURRENT = 3
-LAUNCH_INTERVAL = 12.0
+
+
+def _positive_env(name, default, cast):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = cast(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive number") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive number")
+    return value
+
+
+MAX_CONCURRENT = _positive_env("SSSTIK_MAX_CONCURRENT", 3, int)
+LAUNCH_INTERVAL = _positive_env("SSSTIK_LAUNCH_INTERVAL", 12.0, float)
 MAX_ATTEMPTS = 4
 RETRY_DELAY = 5.0
 RATE_LIMIT_DELAY = 60.0
@@ -52,9 +70,12 @@ def normalize_url(value: str) -> tuple[str, str]:
 class BatchRequest(BaseModel):
     urls: list[str] = Field(min_length=1, max_length=10000)
     request_id: str | None = Field(default=None, max_length=128)
+    start_number: int = Field(ge=1, le=2147483647)
 
 
-class BatchAddRequest(BatchRequest):
+class BatchAddRequest(BaseModel):
+    urls: list[str] = Field(min_length=1, max_length=10000)
+    request_id: str | None = Field(default=None, max_length=128)
     batch_id: str
 
 
@@ -63,7 +84,6 @@ class QueueStore:
         self.data_dir = Path(data_dir)
         self.downloads_dir = self.data_dir / "downloads"
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
-        self.counter_file = self.data_dir / "counter.txt"
         self.db = sqlite3.connect(self.data_dir / "queue.sqlite3")
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -92,17 +112,35 @@ class QueueStore:
             );
         """)
         self.db.commit()
-        # The downloader installs the final filename only after a validated, atomic save.
+        # Recover fully written files, then start every app session with no
+        # failed or unfinished work from the previous run.  counter.txt is not
+        # changed, so cleared jobs never cause download numbers to be reused.
         with self.db:
-            for job in self.db.execute("SELECT * FROM jobs WHERE status='processing'").fetchall():
+            for job in self.db.execute(
+                "SELECT * FROM jobs WHERE status IN ('processing','queued','retrying')"
+            ).fetchall():
                 path = self.downloads_dir / f"{job['number']}.mp4"
-                if path.is_file() and path.stat().st_size > 0:
+                if job["status"] == "processing" and ssstik.is_valid_mp4(path):
                     self.update(job["id"], status="completed", progress=100,
                                 filename=path.name, message="Recovered completed download")
                 else:
-                    self.update(job["id"], status="queued", progress=0,
-                                attempts=max(0, job["attempts"] - 1), next_attempt_at=0,
-                                message="Resumed after interruption")
+                    path.unlink(missing_ok=True)
+                    self.update(job["id"], status="error", progress=0,
+                                next_attempt_at=0,
+                                message="Paused after app restart; click Retry failed to resume")
+            for job in self.db.execute(
+                "SELECT * FROM jobs WHERE status='completed'"
+            ).fetchall():
+                path = self.downloads_dir / (job["filename"] or "")
+                if not ssstik.is_valid_mp4(path):
+                    path.unlink(missing_ok=True)
+                    self.update(job["id"], status="error", progress=0,
+                                filename=None, next_attempt_at=0,
+                                message="Downloaded file is missing; click Retry failed")
+            self.db.execute("DELETE FROM jobs WHERE status='error'")
+            self.db.execute("DELETE FROM additions")
+            self.db.execute("DELETE FROM batches WHERE NOT EXISTS "
+                            "(SELECT 1 FROM jobs WHERE jobs.batch_id=batches.id)")
 
     def close(self):
         self.db.close()
@@ -122,37 +160,21 @@ class QueueStore:
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)", (key, value))
 
-    def _next_number(self) -> int:
-        try:
-            counter = int(self.counter_file.read_text().strip())
-        except (OSError, ValueError):
-            counter = 0
-        stored = self.db.execute("SELECT COALESCE(MAX(number), 0) FROM jobs").fetchone()[0]
-        existing = max((int(p.stem) for p in self.downloads_dir.glob("*.mp4") if p.stem.isdigit()), default=0)
-        return max(counter, stored, existing) + 1
-
-    def _sync_counter(self):
-        # SQLite is authoritative; the legacy counter remains useful for older versions.
-        try:
-            number = self._next_number() - 1
-            temp = self.counter_file.with_suffix(".tmp")
-            temp.write_text(str(number))
-            temp.replace(self.counter_file)
-        except OSError:
-            LOG.warning("Could not update legacy counter; queue.sqlite3 retains reserved numbers")
-
     def archived(self, identity: str, exclude: int = 0):
         rows = self.db.execute("SELECT * FROM jobs WHERE identity=? AND status='completed' AND id != ? ORDER BY id DESC",
                                (identity, exclude)).fetchall()
         for row in rows:
             path = self.downloads_dir / (row["filename"] or "")
-            if path.is_file() and path.stat().st_size > 0:
+            if ssstik.is_valid_mp4(path):
                 return row
         return None
 
-    def add(self, urls: list[str], batch_id: str | None = None, request_id: str | None = None):
+    def add(self, urls: list[str], batch_id: str | None = None,
+            request_id: str | None = None, start_number: int = 1):
         normalized = [normalize_url(url) for url in urls]
-        request_urls = json.dumps(normalized)
+        request_urls = json.dumps(
+            normalized if batch_id else {"urls": normalized, "start_number": start_number}
+        )
         if request_id:
             if batch_id:
                 previous = self.db.execute("SELECT * FROM additions WHERE request_id=?", (request_id,)).fetchone()
@@ -179,7 +201,13 @@ class QueueStore:
                 self.db.execute("INSERT INTO batches VALUES (?,?,?,?,?)", (batch_id, request_id, request_urls, now, now))
             elif not self.db.execute("SELECT id FROM batches WHERE id=?", (batch_id,)).fetchone():
                 raise HTTPException(404, "Batch not found")
-            next_number = self._next_number()
+            if batch_id and is_addition:
+                next_number = self.db.execute(
+                    "SELECT COALESCE(MAX(number), 0) + 1 FROM jobs WHERE batch_id=?",
+                    (batch_id,),
+                ).fetchone()[0]
+            else:
+                next_number = start_number
             accepted_urls, numbers = [], []
             for url, identity in normalized:
                 if self.db.execute("SELECT id FROM jobs WHERE batch_id=? AND identity=?", (batch_id, identity)).fetchone():
@@ -187,6 +215,12 @@ class QueueStore:
                 archive = self.archived(identity)
                 number = archive["number"] if archive else next_number
                 if not archive:
+                    target = self.downloads_dir / f"{number}.mp4"
+                    if target.exists():
+                        raise HTTPException(
+                            409,
+                            f"{target.name} already exists. Choose a different start number.",
+                        )
                     next_number += 1
                 self.db.execute("""INSERT INTO jobs
                     (batch_id,url,identity,number,status,progress,message,filename,updated_at)
@@ -202,7 +236,6 @@ class QueueStore:
             if request_id and is_addition:
                 self.db.execute("INSERT INTO additions VALUES (?,?,?,?)",
                                 (request_id, batch_id, request_urls, json.dumps(response)))
-        self._sync_counter()
         return response
 
     def snapshot(self, batch_id: str):
@@ -223,6 +256,7 @@ class QueueStore:
                 "results": results, "successful": successful, "failed": failed,
                 "completed_count": successful + failed, "active_count": active,
                 "created_at": batch["created_at"], "updated_at": batch["updated_at"],
+                "download_directory": str(self.downloads_dir.resolve()),
                 "cooldown_until": self.get_setting("cooldown_until")}
 
     def retry(self, batch_id: str):
@@ -284,9 +318,9 @@ class DownloadQueue:
             except Exception:
                 LOG.exception("Failed to close downloader browser")
         with self.store.db:
-            self.store.db.execute("""UPDATE jobs SET status='queued', progress=0,
-                attempts=MAX(0,attempts-1), message='Resumed after interruption'
-                WHERE status='processing'""")
+            self.store.db.execute("""UPDATE jobs SET status='error', progress=0,
+                next_attempt_at=0, message='Paused when the app closed; click Retry failed to resume'
+                WHERE status IN ('processing','queued','retrying')""")
         self.store.close()
 
     def ready(self):
@@ -389,9 +423,14 @@ class DownloadQueue:
             self.publish(job["batch_id"])
         try:
             filename = await self.downloader.download_url(job["url"], job["number"], progress_callback)
+            saved_path = self.store.downloads_dir / filename
+            if not ssstik.is_valid_mp4(saved_path):
+                raise RuntimeError(f"Download finished but no valid file was saved at {saved_path.resolve()}")
             with self.store.db:
                 self.store.update(job["id"], status="completed", progress=100, filename=filename,
-                                  message=f"Saved as {filename}", next_attempt_at=0)
+                                  message=f"Saved to {saved_path.resolve()}",
+                                  next_attempt_at=0)
+            LOG.warning("Saved TikTok download to %s", saved_path.resolve())
             self.publish(job["batch_id"])
         except asyncio.CancelledError:
             raise
@@ -411,6 +450,7 @@ def create_app(data_dir: Path | str | None = None, downloader_factory=None, **qu
             yield
         finally:
             await queue.close()
+            await previews.close()
 
     application = FastAPI(lifespan=lifespan)
     static_dir = Path(__file__).resolve().parent / "static"
@@ -419,16 +459,19 @@ def create_app(data_dir: Path | str | None = None, downloader_factory=None, **qu
     previews = Thumbnails()
 
     @application.get("/api/thumbnail")
-    async def thumbnail(url: str):
+    async def thumbnail(url: str, attempt: int = 0):
         try:
             normalized, _ = normalize_url(url)
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
-        return await previews.response(normalized)
+        return await previews.response(normalized, refresh=attempt > 0)
 
     @application.get("/")
     async def root():
-        return FileResponse(static_dir / "index.html")
+        return FileResponse(
+            static_dir / "index.html",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
 
     @application.get("/api/batches")
     async def list_batches():
@@ -436,14 +479,50 @@ def create_app(data_dir: Path | str | None = None, downloader_factory=None, **qu
         rows = queue.store.db.execute("SELECT id FROM batches ORDER BY updated_at DESC LIMIT 100").fetchall()
         return {"batches": [queue.store.snapshot(row["id"]) for row in rows]}
 
+    @application.post("/api/open-downloads")
+    async def open_downloads_folder():
+        folder = application.state.queue.store.downloads_dir.resolve()
+        try:
+            if os.name == "nt":
+                subprocess.Popen(["explorer.exe", str(folder)])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(folder)])
+            else:
+                subprocess.Popen(["xdg-open", str(folder)])
+        except OSError as error:
+            raise HTTPException(500, f"Could not open {folder}: {error}") from error
+        return {"path": str(folder)}
+
+    @application.get("/api/downloads/{filename}")
+    async def retrieve_download(filename: str):
+        if not re.fullmatch(r"\d+\.mp4", filename):
+            raise HTTPException(404, "Download not found")
+        folder = application.state.queue.store.downloads_dir.resolve()
+        path = folder / filename
+        if not ssstik.is_valid_mp4(path):
+            raise HTTPException(404, "Downloaded file is missing or invalid")
+        return FileResponse(path, media_type="video/mp4", filename=filename)
+
     @application.get("/api/batch/{batch_id}")
     async def batch_snapshot(batch_id: str):
         return application.state.queue.store.snapshot(batch_id)
 
+    @application.get("/api/batch/{batch_id}/failed.txt", response_class=PlainTextResponse)
+    async def failed_links(batch_id: str):
+        snapshot = application.state.queue.store.snapshot(batch_id)
+        urls = [result["url"] for result in snapshot["results"] if result["status"] == "error"]
+        return PlainTextResponse(
+            "\n".join(urls) + ("\n" if urls else ""),
+            headers={"Content-Disposition": f'attachment; filename="failed-{batch_id}.txt"'},
+        )
+
     async def add_request(request, batch_id=None):
         queue = application.state.queue
         try:
-            result = queue.store.add(request.urls, batch_id, request.request_id)
+            result = queue.store.add(
+                request.urls, batch_id, request.request_id,
+                getattr(request, "start_number", 1),
+            )
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
         queue.publish(result["batch_id"])
