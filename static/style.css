@@ -50,6 +50,7 @@ h1 {
 }
 #url-input {
     flex: 1;
+    min-width: 0;
     padding: 10px 14px;
     border-radius: 8px;
     border: 1px solid #333;
@@ -57,6 +58,8 @@ h1 {
     color: #fff;
     font-size: 0.9rem;
     outline: none;
+    font-family: inherit;
+    resize: vertical;
 }
 #url-input:focus {
     border-color: #fe2c55;
@@ -239,7 +242,41 @@ h1 {
 
 .task-message {
     font-size: 0.75rem;
-    color: #666;
+    color: #aaa;
+    overflow-wrap: anywhere;
+}
+
+.feedback {
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+.feedback:empty { display: none; }
+.feedback.error { color: #ff8b80; }
+.batch-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+}
+.connection-status { color: #999; font-size: 0.75rem; }
+.secondary-btn {
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: #262626;
+    color: #eee;
+    cursor: pointer;
+    white-space: nowrap;
+}
+button:disabled { cursor: not-allowed; opacity: 0.45; }
+.task-status.queued { background: #262626; color: #bbb; }
+.task-status.retrying { background: #2a1a00; color: #ffb74d; }
+@media (max-width: 440px) {
+    .drop-zone { padding: 24px 14px; }
+    .batch-status-text { gap: 10px; }
 }
 
 .queue-list::-webkit-scrollbar {

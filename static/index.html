@@ -13,7 +13,7 @@
             <p class="drop-text">Drop TikTok links here</p>
             <span class="or">or</span>
             <div class="input-row">
-                <input type="url" id="url-input" placeholder="Paste TikTok URL..." autocomplete="off" />
+                <textarea id="url-input" rows="2" placeholder="Paste one or more TikTok links..." aria-label="TikTok links" spellcheck="false"></textarea>
                 <button id="add-btn">Add</button>
             </div>
         </div>
@@ -24,6 +24,7 @@
             </div>
             <div id="queue-list" class="queue-list"></div>
         </div>
+        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
         <button id="download-all-btn" class="download-all-btn" disabled>Download All</button>
         <div id="batch-progress" class="batch-progress" style="display:none;">
             <div class="batch-status-text">
@@ -31,8 +32,12 @@
                 <span id="batch-counts"></span>
             </div>
             <div class="progress-wrap batch-bar"><div id="batch-bar" class="progress-bar"></div></div>
+            <div class="batch-actions">
+                <span id="connection-status" class="connection-status" role="status"></span>
+                <button id="retry-failed-btn" class="secondary-btn" hidden>Retry failed</button>
+            </div>
         </div>
-        <div id="task-list" class="task-list"></div>
+        <div id="task-list" class="task-list" aria-label="Download status"></div>
     </div>
     <script src="/static/script.js"></script>
 </body>
