@@ -52,6 +52,17 @@ node tests/drop.test.js
 
 Node is only needed for the JavaScript checks, not for running the app. Keep the new `thumbnails.py`, `requirements.txt`, and tests in the commit along with the modified files.
 
+## Code layout
+
+- `app.py` composes FastAPI routes and application lifetime.
+- `config.py` owns environment-backed queue configuration.
+- `domain.py` owns request models and TikTok URL normalization.
+- `queue_store.py` owns SQLite persistence, recovery, and snapshots.
+- `scheduler.py` owns concurrency, launch pacing, retries, and progress publication.
+- `ssstik.py` owns browser lifecycle and the SSSTik download workflow.
+- `ad_flow.py` isolates provider-specific rewarded-ad handling.
+- `thumbnails.py` owns preview lookup and caching.
+
 ## Headless trial (not yet verified against SSSTik)
 
 `SSSTIK_HEADLESS=1` now uses full Chromium's new headless mode (`channel="chromium"`), not Playwright's separate headless shell. Headed mode remains the default. Install the full browser using `py -m playwright install chromium`.

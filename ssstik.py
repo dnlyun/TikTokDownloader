@@ -19,6 +19,13 @@ from playwright.async_api import (
     async_playwright,
 )
 
+from ad_flow import (
+    advance_ad_flow,
+    click_reward_dismiss,
+    resume_close_confirmation,
+    reward_countdown_active,
+)
+
 
 class RateLimitError(Exception):
     pass
@@ -364,110 +371,24 @@ class SsstikDownloader:
         and a no-ad download all follow the same path. Detached cross-origin ad
         frames and popups are expected and intentionally ignored.
         """
-        for candidate in tuple(pages):
-            try:
-                if candidate.is_closed():
-                    continue
-                frames = candidate.frames
-            except Exception:
-                continue
-            for frame in frames:
-                if await self._resume_close_confirmation(frame):
-                    return True
-                countdown_active = await self._reward_countdown_active(frame)
-                # Rewarded Google ads expose this control as soon as the timer
-                # reaches its eligible state.  Handle it before walking the
-                # provider-neutral selectors across every frame; otherwise a
-                # collection of slow/detached ad frames can delay the click by
-                # several seconds.
-                if not countdown_active and await self._click_reward_dismiss(frame):
-                    return True
-                for selector in self.AD_CONTROL_SELECTORS:
-                    if countdown_active and any(
-                        word in selector.lower() for word in ("dismiss", "close")
-                    ):
-                        continue
-                    try:
-                        for control in await frame.locator(selector).all():
-                            if await control.is_visible():
-                                await control.click(timeout=1000)
-                                return True
-                    except Exception:
-                        continue
-                try:
-                    for semantic in await frame.get_by_role(
-                        "button", name=self.AD_CONTROL_NAME
-                    ).all():
-                        if not countdown_active and await semantic.is_visible():
-                            await semantic.click(timeout=1000)
-                            return True
-                except Exception:
-                    continue
-        return False
+        return await advance_ad_flow(
+            pages, self.AD_CONTROL_SELECTORS, self.AD_CONTROL_NAME
+        )
 
     @staticmethod
     async def _click_reward_dismiss(frame) -> bool:
         """Immediately close a completed rewarded ad, never an active timer."""
-        # Do not click the #dismiss-button wrapper: it can remain visible while
-        # the timer is running and is what triggers the forfeit confirmation.
-        for selector in ("#dismiss-button-element",):
-            try:
-                control = frame.locator(selector).first
-                if not await control.is_visible():
-                    continue
-                # Some providers leave the wrapper visible while disabling the
-                # actual button.  Respect that state when Playwright exposes it.
-                if not await control.is_enabled():
-                    continue
-                await control.click(timeout=500)
-                return True
-            except Exception:
-                continue
-        return False
+        return await click_reward_dismiss(frame)
 
     @staticmethod
     async def _reward_countdown_active(frame) -> bool:
         """Return true while a rewarded ad says closing would forfeit the reward."""
-        try:
-            locator = frame.locator("#dismiss-button")
-            # Most frames are not the rewarded-ad frame.  Locator.inner_text()
-            # auto-waits for a missing element by default, which multiplied the
-            # close delay across every unrelated frame.
-            if await locator.count() == 0:
-                return False
-            text = (await locator.first.inner_text(timeout=250)).strip()
-            match = re.search(r"(?:reward|close|skip)\s+in\s+(\d+)", text, re.I)
-            # Google rewarded ads commonly leave the label at "1 seconds" even
-            # after the eligible Close control is enabled in a background tab.
-            return bool(match and int(match.group(1)) > 1)
-        except Exception:
-            return False
+        return await reward_countdown_active(frame)
 
     @staticmethod
     async def _resume_close_confirmation(frame) -> bool:
         """Recover from an early-close confirmation without forfeiting the file."""
-        try:
-            dialogs = frame.locator("#close-confirmation-dialog")
-            if await dialogs.count() == 0:
-                return False
-            dialog = dialogs.first
-            active = await dialog.evaluate("""element => {
-                const style = getComputedStyle(element);
-                return style.display !== 'none' && style.visibility !== 'hidden' &&
-                    Number(style.opacity || 1) > 0.1 && style.pointerEvents !== 'none';
-            }""", timeout=250)
-            if not active:
-                return False
-            resumes = frame.locator("#resume-ad-button")
-            if await resumes.count() == 0:
-                return False
-            resume = resumes.first
-            if await resume.is_visible():
-                await resume.click(timeout=1000)
-                return True
-        except Exception:
-            pass
-        return False
+        return await resume_close_confirmation(frame)
 
     async def _save_download(self, download, number: int, state=None) -> str:
         filename = f"{number}.mp4"
