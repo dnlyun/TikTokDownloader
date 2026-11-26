@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "TikTok Ordered Link Selector",
+  "version": "1.0.0",
+  "description": "Select TikTok posts in order and copy their links for TikTok Downloader.",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "Select TikTok links"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

@@ -9,6 +9,8 @@ py main.py
 
 Paste or drop multiple TikTok post links. Videos use SSSTik HD only; photo posts use its MP4 conversion. On Windows, the downloader targets the installed Google Chrome channel by default and keeps the window visible so ad playback is not background-throttled. Set `SSSTIK_BROWSER_CHANNEL=msedge` or `chromium` to override it. Set `SSSTIK_HEADLESS=1` only if your environment supports the ad flow headlessly.
 
+For bulk selection from a TikTok Likes grid, load the unpacked extension in `chrome-extension/` from `chrome://extensions`. Click its toolbar icon on TikTok, select posts in the desired order, copy the ordered links, and paste them into the downloader once. See `chrome-extension/README.md` for Windows setup.
+
 Ad handling is state-driven: no-ad downloads proceed immediately, while skip, dismiss, and close-ad controls are detected across nested frames and popup tabs whenever they appear. There is no assumed ad duration. Popup tabs are closed after their job. Failed attempts save a sanitized JSON report and, when possible, a screenshot under `downloads/diagnostics/`.
 
 Tuning environment variables:
@@ -48,6 +50,7 @@ Additional offline checks:
 ```powershell
 py -m unittest discover -s tests -p "test_*.py"
 node tests/drop.test.js
+node tests/extension.test.js
 ```
 
 Node is only needed for the JavaScript checks, not for running the app. Keep the new `thumbnails.py`, `requirements.txt`, and tests in the commit along with the modified files.

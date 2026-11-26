@@ -1,0 +1,91 @@
+#tt-ordered-selector-toolbar {
+  position: fixed;
+  z-index: 2147483647;
+  top: 16px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  background: #18181b;
+  color: #fafafa;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#tt-ordered-selector-toolbar .ttos-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+#tt-ordered-selector-toolbar .ttos-count {
+  margin-top: 2px;
+  color: #d4d4d8;
+}
+
+#tt-ordered-selector-toolbar .ttos-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+#tt-ordered-selector-toolbar button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #52525b;
+  border-radius: 8px;
+  background: #27272a;
+  color: #fafafa;
+  cursor: pointer;
+  font: inherit;
+}
+
+#tt-ordered-selector-toolbar button:hover { background: #3f3f46; }
+#tt-ordered-selector-toolbar button:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
+#tt-ordered-selector-toolbar button:disabled { cursor: default; opacity: 0.45; }
+#tt-ordered-selector-toolbar .ttos-primary { border-color: #fe2c55; background: #fe2c55; }
+#tt-ordered-selector-toolbar .ttos-primary:hover { background: #e11d48; }
+
+#tt-ordered-selector-toolbar .ttos-message {
+  min-height: 20px;
+  margin-top: 8px;
+  color: #a7f3d0;
+}
+
+.ttos-positioned-tile { position: relative !important; }
+
+.ttos-select-button {
+  position: absolute;
+  z-index: 2147483646;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 8px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  font: 700 15px/1 system-ui, sans-serif;
+}
+
+.ttos-select-button:hover { transform: scale(1.06); }
+.ttos-select-button:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
+.ttos-select-button .ttos-check { display: block; }
+.ttos-select-button .ttos-order { display: none; }
+.ttos-select-button.ttos-selected { border-color: #fff; background: #fe2c55; }
+.ttos-select-button.ttos-selected .ttos-check { display: none; }
+.ttos-select-button.ttos-selected .ttos-order { display: block; }
+
+.ttos-copy-fallback {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+}
