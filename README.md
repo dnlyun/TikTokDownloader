@@ -14,7 +14,7 @@ Ad handling is state-driven: no-ad downloads proceed immediately, while skip, di
 Tuning environment variables:
 
 ```powershell
-$env:SSSTIK_MAX_CONCURRENT="3"       # default 3
+$env:SSSTIK_MAX_CONCURRENT="10"       # default 10
 $env:SSSTIK_LAUNCH_INTERVAL="12"     # seconds between new submissions
 $env:SSSTIK_NAVIGATION_TIMEOUT="45"
 $env:SSSTIK_RESULT_TIMEOUT="90"
